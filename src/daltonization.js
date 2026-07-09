@@ -1,6 +1,8 @@
 // src/utils/daltonization.js
 // Python 서버와 동일한 LMS 변환 행렬 사용
 
+const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080/api';
+
 const MATRICES = {
     protanopia: [
         [0.152286, 1.052583, -0.204868],
@@ -77,7 +79,7 @@ export async function getDaltonizedImageUrl(imageUrl, colorType) {
     const token = localStorage.getItem('token');
 
     // 1단계: Spring Boot 프록시로 S3 이미지 가져오기 (CORS 우회)
-    const proxyUrl = `http://localhost:8080/api/wardrobe/image-proxy?url=${encodeURIComponent(imageUrl)}`;
+    const proxyUrl = `${BASE_URL}/wardrobe/image-proxy?url=${encodeURIComponent(imageUrl)}`;
     const imageResponse = await fetch(proxyUrl, {
         headers: { Authorization: `Bearer ${token}` }
     });
@@ -93,7 +95,7 @@ export async function getDaltonizedImageUrl(imageUrl, colorType) {
     });
 
     // 3단계: 마이페이지와 동일한 엔드포인트 호출
-    const daltonizeResponse = await fetch('http://localhost:8080/api/user/color-assistant/daltonize', {
+    const daltonizeResponse = await fetch(`${BASE_URL}/user/color-assistant/daltonize`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

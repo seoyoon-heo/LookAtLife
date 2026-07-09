@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { weatherAPI, wardrobeAPI, calendarAPI, recommendationAPI } from '../api/api';
 import { theme } from '../styles/theme';
+import { pad, toDateStr, formatDate, formatTime, getDday } from '../utils/date';
+import { getWeatherEmoji, getTpoColor, getTpoEmoji } from '../utils/format';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -21,11 +23,6 @@ function Home() {
     const [weekWeathers, setWeekWeathers] = useState({});
 
     const today = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-    const toDateStr = (date) => {
-        const d = new Date(date);
-        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-    };
 
     useEffect(() => {
         fetchWeather();
@@ -104,34 +101,6 @@ function Home() {
             setRecommendation(res.data);
         } catch (err) { console.error(err); }
         finally { setLoading(false); }
-    };
-
-    const getWeatherEmoji = (desc) => {
-        if (!desc) return '🌤️';
-        if (desc.includes('맑')) return '☀️';
-        if (desc.includes('구름')) return '⛅';
-        if (desc.includes('비')) return '🌧️';
-        if (desc.includes('눈')) return '❄️';
-        return '🌤️';
-    };
-
-    const getTpoColor = (tpo) => {
-        const map = {
-            '데이트': '#FF6B9D', '직장': '#4A90D9', '캐주얼': '#7EC8A4',
-            '운동': '#F5A623', '파티': '#BD10E0', '여행': '#50E3C2',
-            '일상': '#9B9B9B', '격식': '#4A4A4A'
-        };
-        return map[tpo] || theme.colors.primary;
-    };
-
-    const getTpoEmoji = (tpo) => {
-        const map = { '데이트':'💑','직장':'💼','캐주얼':'👟','운동':'🏃','파티':'🎉','여행':'✈️','일상':'☀️','격식':'👔' };
-        return map[tpo] || '📅';
-    };
-
-    const formatTime = (datetime) => {
-        const d = new Date(datetime);
-        return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
     };
 
     const getEventsOnDay = (date) => weekEvents.filter(e => {

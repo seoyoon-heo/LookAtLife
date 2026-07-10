@@ -1,7 +1,6 @@
 // src/utils/daltonization.js
 // Python 서버와 동일한 LMS 변환 행렬 사용
-
-const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080/api';
+import { BASE_URL } from './api/env';
 
 const MATRICES = {
     protanopia: [

@@ -1,3 +1,4 @@
+import dayjs from 'dayjs';
 export const pad = (n) => String(n).padStart(2, '0');
 
 export const toDateStr = (d) => {
@@ -16,10 +17,8 @@ export const formatTime = (datetime) => {
 };
 
 export const getDday = (datetime) => {
-  const target = new Date(datetime); target.setHours(0,0,0,0);
-  const now = new Date(); now.setHours(0,0,0,0);
-  const diff = Math.round((target - now) / (1000*60*60*24));
+  const diff = dayjs(datetime).startOf('day').diff(dayjs().startOf('day'), 'day');
   if (diff === 0) return 'D-Day';
-  if (diff > 0) return `D-${diff}`;
+  if (diff > 0)   return `D-${diff}`;
   return `D+${Math.abs(diff)}`;
 };

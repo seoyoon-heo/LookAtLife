@@ -2,8 +2,11 @@ import React, { useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
 import { calendarAPI, recommendationAPI } from '../api/api';
 import { theme } from '../styles/theme';
-import { pad, toDateStr, formatDate, formatTime, getDday } from '../utils/date';
 import { getWeatherEmoji, getTpoColor, getTpoEmoji } from '../utils/format';
+import { getDday } from '../utils/date';
+import dayjs from 'dayjs';
+import 'dayjs/locale/ko';
+dayjs.locale('ko');
 
 const TPO_OPTIONS = ['데이트', '직장', '캐주얼', '운동', '파티', '여행', '일상', '격식'];
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -67,12 +70,12 @@ function Calendar() {
         });
 
     const getOutfitsOnDate = (year, month, day) => {
-        const dateStr = `${year}-${pad(month+1)}-${pad(day)}`;
+        const dateStr = dayjs().year(year).month(month).date(day).format('YYYY-MM-DD');
         return outfits.filter(o => o.outfitDate === dateStr);
     };
 
-    const getDaysInMonth = (y, m) => new Date(y, m+1, 0).getDate();
-    const getFirstDay = (y, m) => new Date(y, m, 1).getDay();
+    const getDaysInMonth = (y, m) => dayjs().year(y).month(m).daysInMonth();
+    const getFirstDay = (y, m) => dayjs().year(y).month(m).date(1).day();
 
     const prevMonth = () => {
         if (currentMonth === 0) { setCurrentYear(y => y-1); setCurrentMonth(11); }
@@ -87,7 +90,7 @@ function Calendar() {
     };
 
     const handleDayClick = (day) => {
-        const dateStr = `${currentYear}-${pad(currentMonth+1)}-${pad(day)}T09:00`;
+        const dateStr = dayjs(new Date(currentYear, currentMonth, day)).format('YYYY-MM-DD') + 'T09:00';
         setForm(f => ({ ...f, eventDatetime: dateStr }));
         setShowForm(false);
         setPopup({
@@ -246,7 +249,7 @@ function Calendar() {
                                 <p style={styles.popupDate}>
                                     {popup.month+1}월 {popup.day}일
                                     <span style={styles.popupWeekday}>
-                                        ({WEEKDAYS[new Date(popup.year, popup.month, popup.day).getDay()]})
+                                        ({dayjs(new Date(popup.year, popup.month, popup.day)).format('dd')})
                                     </span>
                                 </p>
                             </div>
@@ -274,7 +277,7 @@ function Calendar() {
                                                 {getDday(ev.eventDatetime)}
                                             </span>
                                         </div>
-                                        <p style={styles.eventTime}>{formatTime(ev.eventDatetime)}</p>
+                                        <p style={styles.eventTime}>{dayjs(ev.eventDatetime).format('A hh:mm')}</p>
                                         <span style={{ ...styles.tpoTag, backgroundColor: getTpoColor(ev.tpoKeyword)+'22', color: getTpoColor(ev.tpoKeyword) }}>
                                             {ev.tpoKeyword}
                                         </span>

@@ -9,7 +9,11 @@ import Calendar from './pages/Calendar';
 import MyPage from './pages/MyPage';
 import api from './api/api';
 
-function AuthGuard({ children }) {
+interface AuthGuardProps {
+  children: React.ReactNode;
+}
+
+function AuthGuard({ children }: AuthGuardProps) {
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -18,7 +22,6 @@ function AuthGuard({ children }) {
       navigate('/login', { replace: true });
       return;
     }
-    // 토큰 유효성 서버 검증
     api.get('/user/profile').catch((err) => {
       if (err.response?.status === 401 || err.response?.status === 403) {
         localStorage.clear();
@@ -29,7 +32,7 @@ function AuthGuard({ children }) {
 
   const token = localStorage.getItem('token');
   if (!token) return <Navigate to="/login" replace />;
-  return children;
+  return <>{children}</>;
 }
 
 function App() {

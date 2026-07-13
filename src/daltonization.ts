@@ -1,8 +1,8 @@
-// src/utils/daltonization.js
-// Python 서버와 동일한 LMS 변환 행렬 사용
-import api, {colorAssistantAPI} from './api/api';
+import api, { colorAssistantAPI } from './api/api';
 
-const MATRICES = {
+type ColorType = 'protanopia' | 'deuteranopia' | 'tritanopia';
+
+const MATRICES: Record<ColorType, number[][]> = {
     protanopia: [
         [0.152286, 1.052583, -0.204868],
         [0.114503, 0.786281,  0.099216],
@@ -20,13 +20,7 @@ const MATRICES = {
     ]
 };
 
-/**
- * ImageData에 Daltonization 보정 적용
- * @param {ImageData} imageData - Canvas에서 추출한 픽셀 데이터
- * @param {string} colorType - 'protanopia' | 'deuteranopia' | 'tritanopia'
- * @returns {ImageData} - 보정된 픽셀 데이터
- */
-export function applyDaltonization(imageData, colorType) {
+export function applyDaltonization(imageData: ImageData, colorType: ColorType): ImageData {
     const matrix = MATRICES[colorType];
     if (!matrix) return imageData;
 
@@ -37,18 +31,15 @@ export function applyDaltonization(imageData, colorType) {
         const g = data[i + 1] / 255;
         const b = data[i + 2] / 255;
 
-        // 선형 RGB 변환 (감마 보정)
         const rLin = r <= 0.04045 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4);
         const gLin = g <= 0.04045 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4);
         const bLin = b <= 0.04045 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4);
 
-        // 행렬 변환
         const rNew = matrix[0][0] * rLin + matrix[0][1] * gLin + matrix[0][2] * bLin;
         const gNew = matrix[1][0] * rLin + matrix[1][1] * gLin + matrix[1][2] * bLin;
         const bNew = matrix[2][0] * rLin + matrix[2][1] * gLin + matrix[2][2] * bLin;
 
-        // 감마 복원
-        const toSRGB = (c) => {
+        const toSRGB = (c: number): number => {
             const clamped = Math.max(0, Math.min(1, c));
             return clamped <= 0.0031308
                 ? clamped * 12.92
@@ -58,46 +49,29 @@ export function applyDaltonization(imageData, colorType) {
         data[i]     = Math.round(toSRGB(rNew) * 255);
         data[i + 1] = Math.round(toSRGB(gNew) * 255);
         data[i + 2] = Math.round(toSRGB(bNew) * 255);
-        // alpha(data[i+3])는 그대로
     }
 
     return new ImageData(data, imageData.width, imageData.height);
 }
 
-/**
- * 이미지 URL → 보정된 Blob URL 변환
- * @param {string} imageUrl - 원본 이미지 URL (S3 URL)
- * @param {string} colorType - 색각 유형
- * @returns {Promise<string>} - 보정된 이미지의 Blob URL
- */
-/**
- * 이미지 URL → 백엔드 Daltonization API → 보정된 Blob URL
- * 마이페이지와 동일한 Python 서버 알고리즘 사용
- */
-export async function getDaltonizedImageUrl(imageUrl, colorType) {
-
-    // 1단계: Spring Boot 프록시로 S3 이미지 가져오기 (CORS 우회)
+export async function getDaltonizedImageUrl(imageUrl: string, colorType: ColorType): Promise<string> {
     const proxyUrl = `/wardrobe/image-proxy?url=${encodeURIComponent(imageUrl)}`;
-    const imageResponse = await api.get(proxyUrl, {responseType: 'blob'});
+    const imageResponse = await api.get(proxyUrl, { responseType: 'blob' });
 
-    // 2단계: blob → base64 변환
-    const blob = imageResponse.data;
-    const base64 = await new Promise((resolve, reject) => {
+    const blob: Blob = imageResponse.data;
+    const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result); // data:image/jpeg;base64,...
+        reader.onloadend = () => resolve(reader.result as string);
         reader.onerror = reject;
         reader.readAsDataURL(blob);
     });
 
-    // 3단계: 마이페이지와 동일한 엔드포인트 호출
     const daltonizeResponse = await colorAssistantAPI.daltonize(base64, colorType);
-
     const result = daltonizeResponse.data;
 
-    // 4단계: corrected base64 → Blob URL
-    const correctedBase64 = result.corrected; // Python 서버 반환값
+    const correctedBase64: string = result.corrected;
     const base64Data = correctedBase64.includes(',')
-        ? correctedBase64.split(',')[1]  // data:image/...;base64, 접두어 제거
+        ? correctedBase64.split(',')[1]
         : correctedBase64;
 
     const byteString = atob(base64Data);

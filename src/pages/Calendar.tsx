@@ -12,16 +12,48 @@ const TPO_OPTIONS = ['데이트', '직장', '캐주얼', '운동', '파티', '�
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12];
 
+interface CalendarEvent {
+    eventId: number;
+    eventName: string;
+    eventDatetime: string;
+    tpoKeyword: string;
+}
+
+interface OutfitMatchedItem {
+    imageUrl?: string;
+}
+
+interface Outfit {
+    outfitDate: string;
+    style?: string;
+    description?: string;
+    matchedItems?: OutfitMatchedItem[];
+}
+
+interface PopupState {
+    year: number;
+    month: number;
+    day: number;
+    events: CalendarEvent[];
+    outfits: Outfit[];
+}
+
+interface EventForm {
+    eventName: string;
+    eventDatetime: string;
+    tpoKeyword: string;
+}
+
 function Calendar() {
     const today = new Date();
-    const [events, setEvents] = useState([]);
-    const [outfits, setOutfits] = useState([]);
+    const [events, setEvents] = useState<CalendarEvent[]>([]);
+    const [outfits, setOutfits] = useState<Outfit[]>([]);
     const [currentYear, setCurrentYear] = useState(today.getFullYear());
     const [currentMonth, setCurrentMonth] = useState(today.getMonth());
     const [showMonthPicker, setShowMonthPicker] = useState(false);
-    const [popup, setPopup] = useState(null);
+    const [popup, setPopup] = useState<PopupState | null>(null);
     const [showForm, setShowForm] = useState(false);
-    const [form, setForm] = useState({ eventName: '', eventDatetime: '', tpoKeyword: '일상' });
+    const [form, setForm] = useState<EventForm>({ eventName: '', eventDatetime: '', tpoKeyword: '일상' });
 
     useEffect(() => { fetchEvents(); fetchOutfits(); }, []);
 
@@ -54,7 +86,7 @@ function Calendar() {
         } catch (err) { alert('일정 추가 실패'); }
     };
 
-    const handleDelete = async (eventId) => {
+    const handleDelete = async (eventId: number) => {
         if (!window.confirm('삭제하시겠습니까?')) return;
         try {
             await calendarAPI.deleteEvent(eventId);
@@ -63,33 +95,33 @@ function Calendar() {
         } catch (err) { alert('삭제 실패'); }
     };
 
-    const getEventsOnDate = (year, month, day) =>
+    const getEventsOnDate = (year: number, month: number, day: number): CalendarEvent[] =>
         events.filter(e => {
             const d = new Date(e.eventDatetime);
             return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day;
         });
 
-    const getOutfitsOnDate = (year, month, day) => {
+    const getOutfitsOnDate = (year: number, month: number, day: number): Outfit[] => {
         const dateStr = dayjs().year(year).month(month).date(day).format('YYYY-MM-DD');
         return outfits.filter(o => o.outfitDate === dateStr);
     };
 
-    const getDaysInMonth = (y, m) => dayjs().year(y).month(m).daysInMonth();
-    const getFirstDay = (y, m) => dayjs().year(y).month(m).date(1).day();
+    const getDaysInMonth = (y: number, m: number) => dayjs().year(y).month(m).daysInMonth();
+    const getFirstDay = (y: number, m: number) => dayjs().year(y).month(m).date(1).day();
 
     const prevMonth = () => {
-        if (currentMonth === 0) { setCurrentYear(y => y-1); setCurrentMonth(11); }
-        else setCurrentMonth(m => m-1);
+        if (currentMonth === 0) { setCurrentYear(y => y - 1); setCurrentMonth(11); }
+        else setCurrentMonth(m => m - 1);
         setPopup(null);
     };
 
     const nextMonth = () => {
-        if (currentMonth === 11) { setCurrentYear(y => y+1); setCurrentMonth(0); }
-        else setCurrentMonth(m => m+1);
+        if (currentMonth === 11) { setCurrentYear(y => y + 1); setCurrentMonth(0); }
+        else setCurrentMonth(m => m + 1);
         setPopup(null);
     };
 
-    const handleDayClick = (day) => {
+    const handleDayClick = (day: number) => {
         const dateStr = dayjs(new Date(currentYear, currentMonth, day)).format('YYYY-MM-DD') + 'T09:00';
         setForm(f => ({ ...f, eventDatetime: dateStr }));
         setShowForm(false);
@@ -108,12 +140,11 @@ function Calendar() {
             <Navbar />
             <div style={styles.container}>
 
-                {/* 헤더 */}
                 <div style={styles.header}>
                     <button style={styles.monthTitleBtn}
                             onClick={() => setShowMonthPicker(!showMonthPicker)}>
                         <span style={styles.yearText}>{currentYear}년</span>
-                        <span style={styles.monthText}>{currentMonth+1}월</span>
+                        <span style={styles.monthText}>{currentMonth + 1}월</span>
                         <span style={styles.dropIcon}>{showMonthPicker ? '▲' : '▼'}</span>
                     </button>
                     <div style={styles.headerRight}>
@@ -130,21 +161,20 @@ function Calendar() {
                     </div>
                 </div>
 
-                {/* 년/월 피커 */}
                 {showMonthPicker && (
                     <div style={styles.pickerBox}>
                         <div style={styles.yearPicker}>
-                            <button style={styles.pickerNavBtn} onClick={() => setCurrentYear(y => y-1)}>◀</button>
+                            <button style={styles.pickerNavBtn} onClick={() => setCurrentYear(y => y - 1)}>◀</button>
                             <span style={styles.pickerYear}>{currentYear}년</span>
-                            <button style={styles.pickerNavBtn} onClick={() => setCurrentYear(y => y+1)}>▶</button>
+                            <button style={styles.pickerNavBtn} onClick={() => setCurrentYear(y => y + 1)}>▶</button>
                         </div>
                         <div style={styles.monthGrid}>
                             {MONTHS.map(m => (
                                 <button key={m} style={{
                                     ...styles.monthPickerBtn,
-                                    backgroundColor: currentMonth === m-1 ? theme.colors.primary : theme.colors.background,
-                                    color: currentMonth === m-1 ? 'white' : theme.colors.text
-                                }} onClick={() => { setCurrentMonth(m-1); setShowMonthPicker(false); setPopup(null); }}>
+                                    backgroundColor: currentMonth === m - 1 ? theme.colors.primary : theme.colors.background,
+                                    color: currentMonth === m - 1 ? 'white' : theme.colors.text
+                                }} onClick={() => { setCurrentMonth(m - 1); setShowMonthPicker(false); setPopup(null); }}>
                                     {m}월
                                 </button>
                             ))}
@@ -152,7 +182,6 @@ function Calendar() {
                     </div>
                 )}
 
-                {/* 일정 추가 폼 */}
                 {showForm && (
                     <div style={styles.formBox}>
                         <p style={styles.formTitle}>새 일정 추가</p>
@@ -173,13 +202,12 @@ function Calendar() {
                     </div>
                 )}
 
-                {/* 캘린더 */}
                 <div style={styles.calendarBox}>
                     <div style={styles.weekdayRow}>
                         {WEEKDAYS.map((d, i) => (
                             <div key={d} style={{
                                 ...styles.weekday,
-                                color: i===0 ? '#FF5A5A' : i===6 ? theme.colors.blue : theme.colors.textSub
+                                color: i === 0 ? '#FF5A5A' : i === 6 ? theme.colors.blue : theme.colors.textSub
                             }}>{d}</div>
                         ))}
                     </div>
@@ -188,16 +216,16 @@ function Calendar() {
                             <div key={`e-${i}`} style={styles.emptyCell} />
                         ))}
                         {Array.from({ length: daysInMonth }).map((_, i) => {
-                            const day = i+1;
+                            const day = i + 1;
                             const dayEvents = getEventsOnDate(currentYear, currentMonth, day);
                             const dayOutfits = getOutfitsOnDate(currentYear, currentMonth, day);
-                            const isToday = today.getFullYear()===currentYear &&
-                                today.getMonth()===currentMonth && today.getDate()===day;
+                            const isToday = today.getFullYear() === currentYear &&
+                                today.getMonth() === currentMonth && today.getDate() === day;
                             const isSelected = popup &&
-                                popup.year===currentYear &&
-                                popup.month===currentMonth &&
-                                popup.day===day;
-                            const dow = (firstDay+i) % 7;
+                                popup.year === currentYear &&
+                                popup.month === currentMonth &&
+                                popup.day === day;
+                            const dow = (firstDay + i) % 7;
 
                             return (
                                 <div key={day} style={{
@@ -209,13 +237,13 @@ function Calendar() {
                                         ...styles.dayCircle,
                                         backgroundColor: isToday ? theme.colors.primary : 'transparent',
                                         color: isToday ? 'white'
-                                            : dow===0 ? '#FF5A5A'
-                                                : dow===6 ? theme.colors.blue
-                                                    : theme.colors.text
+                                            : dow === 0 ? '#FF5A5A'
+                                            : dow === 6 ? theme.colors.blue
+                                            : theme.colors.text
                                     }}>
                                         {day}
                                     </div>
-                                    {dayEvents.slice(0,2).map((ev, ei) => (
+                                    {dayEvents.slice(0, 2).map((ev, ei) => (
                                         <div key={ei} style={{
                                             ...styles.eventChip,
                                             backgroundColor: getTpoColor(ev.tpoKeyword) + '22',
@@ -230,7 +258,7 @@ function Calendar() {
                                         <div style={styles.outfitDot}>👗</div>
                                     )}
                                     {dayEvents.length > 2 && (
-                                        <p style={styles.moreText}>+{dayEvents.length-2}</p>
+                                        <p style={styles.moreText}>+{dayEvents.length - 2}</p>
                                     )}
                                 </div>
                             );
@@ -239,7 +267,6 @@ function Calendar() {
                 </div>
             </div>
 
-            {/* 날짜 팝업 */}
             {popup && (
                 <>
                     <div style={styles.overlay} onClick={() => setPopup(null)} />
@@ -247,7 +274,7 @@ function Calendar() {
                         <div style={styles.popupHeader}>
                             <div>
                                 <p style={styles.popupDate}>
-                                    {popup.month+1}월 {popup.day}일
+                                    {popup.month + 1}월 {popup.day}일
                                     <span style={styles.popupWeekday}>
                                         ({dayjs(new Date(popup.year, popup.month, popup.day)).format('dd')})
                                     </span>
@@ -278,7 +305,7 @@ function Calendar() {
                                             </span>
                                         </div>
                                         <p style={styles.eventTime}>{dayjs(ev.eventDatetime).format('A hh:mm')}</p>
-                                        <span style={{ ...styles.tpoTag, backgroundColor: getTpoColor(ev.tpoKeyword)+'22', color: getTpoColor(ev.tpoKeyword) }}>
+                                        <span style={{ ...styles.tpoTag, backgroundColor: getTpoColor(ev.tpoKeyword) + '22', color: getTpoColor(ev.tpoKeyword) }}>
                                             {ev.tpoKeyword}
                                         </span>
                                     </div>
@@ -291,7 +318,7 @@ function Calendar() {
                                     <p style={styles.outfitCardTitle}>👗 저장된 코디</p>
                                     {outfit.style && <span style={styles.outfitStyle}>{outfit.style}</span>}
                                     {outfit.description && <p style={styles.outfitDesc}>{outfit.description}</p>}
-                                    {outfit.matchedItems?.length > 0 && (
+                                    {outfit.matchedItems && outfit.matchedItems.length > 0 && (
                                         <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
                                             {outfit.matchedItems.map((item, mi) => item.imageUrl && (
                                                 <img key={mi} src={item.imageUrl} alt=""
@@ -328,138 +355,57 @@ function Calendar() {
     );
 }
 
-const styles = {
+const styles: Record<string, React.CSSProperties> = {
     page: { backgroundColor: theme.colors.background, minHeight: '100vh' },
     container: { maxWidth: '480px', margin: '0 auto', padding: '20px 20px 90px' },
     header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' },
     headerRight: { display: 'flex', alignItems: 'center', gap: '6px' },
-    monthTitleBtn: {
-        background: 'none', border: 'none', cursor: 'pointer',
-        display: 'flex', alignItems: 'baseline', gap: '6px', padding: '4px 8px'
-    },
+    monthTitleBtn: { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'baseline', gap: '6px', padding: '4px 8px' },
     yearText: { fontSize: '14px', color: theme.colors.textSub },
     monthText: { fontSize: '28px', fontWeight: '700', color: theme.colors.text },
     dropIcon: { fontSize: '11px', color: theme.colors.textSub },
-    todayBtn: {
-        padding: '6px 12px', backgroundColor: theme.colors.white, color: theme.colors.text,
-        border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.full,
-        fontSize: '12px', cursor: 'pointer'
-    },
-    navBtn: {
-        padding: '6px 10px', backgroundColor: theme.colors.white, color: theme.colors.text,
-        border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.full,
-        fontSize: '18px', cursor: 'pointer'
-    },
-    addBtn: {
-        padding: '7px 14px', backgroundColor: theme.colors.primary, color: 'white',
-        border: 'none', borderRadius: theme.radius.full, fontSize: '13px',
-        cursor: 'pointer', fontWeight: '600'
-    },
-    pickerBox: {
-        backgroundColor: theme.colors.white, borderRadius: theme.radius.xl, padding: '20px',
-        marginBottom: '16px', boxShadow: theme.colors.cardShadow
-    },
+    todayBtn: { padding: '6px 12px', backgroundColor: theme.colors.white, color: theme.colors.text, border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.full, fontSize: '12px', cursor: 'pointer' },
+    navBtn: { padding: '6px 10px', backgroundColor: theme.colors.white, color: theme.colors.text, border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.full, fontSize: '18px', cursor: 'pointer' },
+    addBtn: { padding: '7px 14px', backgroundColor: theme.colors.primary, color: 'white', border: 'none', borderRadius: theme.radius.full, fontSize: '13px', cursor: 'pointer', fontWeight: '600' },
+    pickerBox: { backgroundColor: theme.colors.white, borderRadius: theme.radius.xl, padding: '20px', marginBottom: '16px', boxShadow: theme.colors.cardShadow },
     yearPicker: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '20px', marginBottom: '16px' },
     pickerNavBtn: { background: 'none', border: 'none', fontSize: '16px', cursor: 'pointer', color: theme.colors.text },
     pickerYear: { fontSize: '18px', fontWeight: '700', color: theme.colors.text },
     monthGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' },
-    monthPickerBtn: {
-        padding: '10px', border: 'none', borderRadius: theme.radius.md,
-        fontSize: '13px', cursor: 'pointer', fontWeight: '500'
-    },
-    formBox: {
-        backgroundColor: theme.colors.white, borderRadius: theme.radius.xl, padding: '20px',
-        marginBottom: '16px', boxShadow: theme.colors.cardShadow
-    },
+    monthPickerBtn: { padding: '10px', border: 'none', borderRadius: theme.radius.md, fontSize: '13px', cursor: 'pointer', fontWeight: '500' },
+    formBox: { backgroundColor: theme.colors.white, borderRadius: theme.radius.xl, padding: '20px', marginBottom: '16px', boxShadow: theme.colors.cardShadow },
     formTitle: { fontSize: '15px', fontWeight: '700', color: theme.colors.text, marginBottom: '12px' },
-    input: {
-        width: '100%', padding: '11px 14px', marginBottom: '10px',
-        borderRadius: theme.radius.md, border: `1px solid ${theme.colors.border}`,
-        fontSize: '14px', boxSizing: 'border-box', backgroundColor: theme.colors.white
-    },
-    submitBtn: {
-        flex: 1, padding: '11px', backgroundColor: theme.colors.primary, color: 'white',
-        border: 'none', borderRadius: theme.radius.full, fontSize: '14px',
-        cursor: 'pointer', fontWeight: '600'
-    },
-    cancelBtn: {
-        flex: 1, padding: '11px', backgroundColor: theme.colors.background, color: theme.colors.textSub,
-        border: 'none', borderRadius: theme.radius.full, fontSize: '14px', cursor: 'pointer'
-    },
-    calendarBox: {
-        backgroundColor: theme.colors.white, borderRadius: theme.radius.xl,
-        padding: '16px', boxShadow: theme.colors.cardShadow
-    },
-    weekdayRow: {
-        display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)',
-        borderBottom: `1px solid ${theme.colors.border}`, paddingBottom: '8px', marginBottom: '4px'
-    },
+    input: { width: '100%', padding: '11px 14px', marginBottom: '10px', borderRadius: theme.radius.md, border: `1px solid ${theme.colors.border}`, fontSize: '14px', boxSizing: 'border-box', backgroundColor: theme.colors.white },
+    submitBtn: { flex: 1, padding: '11px', backgroundColor: theme.colors.primary, color: 'white', border: 'none', borderRadius: theme.radius.full, fontSize: '14px', cursor: 'pointer', fontWeight: '600' },
+    cancelBtn: { flex: 1, padding: '11px', backgroundColor: theme.colors.background, color: theme.colors.textSub, border: 'none', borderRadius: theme.radius.full, fontSize: '14px', cursor: 'pointer' },
+    calendarBox: { backgroundColor: theme.colors.white, borderRadius: theme.radius.xl, padding: '16px', boxShadow: theme.colors.cardShadow },
+    weekdayRow: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: `1px solid ${theme.colors.border}`, paddingBottom: '8px', marginBottom: '4px' },
     weekday: { textAlign: 'center', fontSize: '12px', fontWeight: '600', padding: '4px 0' },
     daysGrid: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' },
     emptyCell: { minHeight: '72px', borderBottom: `1px solid ${theme.colors.background}` },
-    cell: {
-        minHeight: '72px', padding: '4px 3px',
-        borderBottom: `1px solid ${theme.colors.background}`,
-        borderRadius: theme.radius.md, transition: 'background 0.15s'
-    },
-    dayCircle: {
-        width: '26px', height: '26px', borderRadius: '50%',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: '13px', fontWeight: '500', marginBottom: '3px'
-    },
-    eventChip: {
-        borderRadius: '3px', padding: '1px 5px', marginBottom: '2px',
-        overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis'
-    },
+    cell: { minHeight: '72px', padding: '4px 3px', borderBottom: `1px solid ${theme.colors.background}`, borderRadius: theme.radius.md, transition: 'background 0.15s' },
+    dayCircle: { width: '26px', height: '26px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '500', marginBottom: '3px' },
+    eventChip: { borderRadius: '3px', padding: '1px 5px', marginBottom: '2px', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' },
     outfitDot: { fontSize: '10px', textAlign: 'center' },
     moreText: { fontSize: '10px', color: theme.colors.textSub, margin: '1px 0 0 3px' },
     overlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 200 },
-    popupBox: {
-        position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-        backgroundColor: theme.colors.white, borderRadius: theme.radius.xl,
-        width: '380px', maxWidth: '90vw', maxHeight: '80vh', overflowY: 'auto',
-        zIndex: 201, boxShadow: '0 20px 60px rgba(0,0,0,0.2)'
-    },
-    popupHeader: {
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '20px 20px 0', borderBottom: `1px solid ${theme.colors.border}`,
-        paddingBottom: '16px', position: 'sticky', top: 0, backgroundColor: theme.colors.white
-    },
+    popupBox: { position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: theme.colors.white, borderRadius: theme.radius.xl, width: '380px', maxWidth: '90vw', maxHeight: '80vh', overflowY: 'auto', zIndex: 201, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' },
+    popupHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 20px 0', borderBottom: `1px solid ${theme.colors.border}`, paddingBottom: '16px', position: 'sticky', top: 0, backgroundColor: theme.colors.white },
     popupDate: { fontSize: '20px', fontWeight: '700', color: theme.colors.text, margin: 0 },
     popupWeekday: { fontSize: '15px', fontWeight: '400', color: theme.colors.textSub, marginLeft: '6px' },
-    addEventOnDayBtn: {
-        padding: '6px 12px', backgroundColor: theme.colors.primaryLight, color: theme.colors.primary,
-        border: 'none', borderRadius: theme.radius.full, fontSize: '12px', cursor: 'pointer', fontWeight: '500'
-    },
+    addEventOnDayBtn: { padding: '6px 12px', backgroundColor: theme.colors.primaryLight, color: theme.colors.primary, border: 'none', borderRadius: theme.radius.full, fontSize: '12px', cursor: 'pointer', fontWeight: '500' },
     closeBtn: { background: 'none', border: 'none', fontSize: '18px', color: '#999', cursor: 'pointer' },
     popupContent: { padding: '16px 20px 20px' },
     noEvent: { color: theme.colors.textLight, fontSize: '14px', textAlign: 'center', padding: '20px 0' },
-    eventCard: {
-        display: 'flex', gap: '10px', alignItems: 'flex-start',
-        backgroundColor: theme.colors.background, borderRadius: theme.radius.md,
-        padding: '12px', marginBottom: '10px'
-    },
+    eventCard: { display: 'flex', gap: '10px', alignItems: 'flex-start', backgroundColor: theme.colors.background, borderRadius: theme.radius.md, padding: '12px', marginBottom: '10px' },
     eventName: { fontSize: '14px', fontWeight: '600', color: theme.colors.text, margin: 0, flex: 1 },
     eventTime: { fontSize: '12px', color: theme.colors.textSub, margin: '4px 0 6px' },
-    ddayBadge: {
-        padding: '2px 8px', borderRadius: theme.radius.full, color: 'white',
-        fontSize: '11px', fontWeight: '700', flexShrink: 0
-    },
+    ddayBadge: { padding: '2px 8px', borderRadius: theme.radius.full, color: 'white', fontSize: '11px', fontWeight: '700', flexShrink: 0 },
     tpoTag: { padding: '2px 10px', borderRadius: theme.radius.full, fontSize: '12px', fontWeight: '500' },
-    deleteBtn: {
-        padding: '4px 10px', backgroundColor: 'white', color: theme.colors.danger,
-        border: `1px solid ${theme.colors.danger}`, borderRadius: theme.radius.full,
-        fontSize: '12px', cursor: 'pointer'
-    },
-    outfitCard: {
-        backgroundColor: theme.colors.primaryLight, borderRadius: theme.radius.md,
-        padding: '14px', marginBottom: '10px'
-    },
+    deleteBtn: { padding: '4px 10px', backgroundColor: 'white', color: theme.colors.danger, border: `1px solid ${theme.colors.danger}`, borderRadius: theme.radius.full, fontSize: '12px', cursor: 'pointer' },
+    outfitCard: { backgroundColor: theme.colors.primaryLight, borderRadius: theme.radius.md, padding: '14px', marginBottom: '10px' },
     outfitCardTitle: { fontSize: '13px', fontWeight: '700', color: theme.colors.primary, margin: '0 0 6px' },
-    outfitStyle: {
-        display: 'inline-block', backgroundColor: 'white', borderRadius: theme.radius.full,
-        padding: '2px 10px', fontSize: '12px', color: theme.colors.primary, marginBottom: '6px'
-    },
+    outfitStyle: { display: 'inline-block', backgroundColor: 'white', borderRadius: theme.radius.full, padding: '2px 10px', fontSize: '12px', color: theme.colors.primary, marginBottom: '6px' },
     outfitDesc: { fontSize: '13px', color: theme.colors.text, lineHeight: '1.5', margin: 0 },
     inlineForm: { marginTop: '12px' },
 };

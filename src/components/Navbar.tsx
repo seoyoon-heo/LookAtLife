@@ -2,6 +2,10 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { theme } from '../styles/theme';
 
+interface IconProps {
+    active: boolean;
+}
+
 const NAV_ITEMS = [
     { path: '/wardrobe', label: '옷장', icon: WardrobeIcon },
     { path: '/calendar', label: '캘린더', icon: CalendarIcon },
@@ -10,7 +14,7 @@ const NAV_ITEMS = [
     { path: '/mypage', label: '마이', icon: MypageIcon },
 ];
 
-function WardrobeIcon({ active }) {
+function WardrobeIcon({ active }: IconProps) {
     return (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <rect x="3" y="3" width="18" height="18" rx="2" stroke={active ? theme.colors.primary : '#888'} strokeWidth="1.8"/>
@@ -21,7 +25,7 @@ function WardrobeIcon({ active }) {
     );
 }
 
-function CalendarIcon({ active }) {
+function CalendarIcon({ active }: IconProps) {
     return (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <rect x="3" y="5" width="18" height="16" rx="2" stroke={active ? theme.colors.primary : '#888'} strokeWidth="1.8"/>
@@ -32,7 +36,7 @@ function CalendarIcon({ active }) {
     );
 }
 
-function HomeIcon({ active }) {
+function HomeIcon({ active }: IconProps) {
     return (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <path d="M3 12L12 4L21 12V21H15V15H9V21H3V12Z"
@@ -42,7 +46,7 @@ function HomeIcon({ active }) {
     );
 }
 
-function RecommendIcon({ active }) {
+function RecommendIcon({ active }: IconProps) {
     return (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <circle cx="12" cy="12" r="9" stroke={active ? theme.colors.primary : '#888'} strokeWidth="1.8"/>
@@ -53,7 +57,7 @@ function RecommendIcon({ active }) {
     );
 }
 
-function MypageIcon({ active }) {
+function MypageIcon({ active }: IconProps) {
     return (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
             <circle cx="12" cy="8" r="4" stroke={active ? theme.colors.primary : '#888'} strokeWidth="1.8"/>
@@ -67,14 +71,13 @@ function Navbar() {
     const navigate = useNavigate();
     const location = useLocation();
 
-    const isActive = (path) => {
+    const isActive = (path: string): boolean => {
         if (path === '/') return location.pathname === '/';
         return location.pathname.startsWith(path);
     };
 
     return (
         <>
-            {/* 상단 헤더 */}
             <div style={styles.header}>
                 <button style={styles.menuBtn}>
                     <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
@@ -96,7 +99,6 @@ function Navbar() {
                 </button>
             </div>
 
-            {/* 하단 탭 바 */}
             <div style={styles.tabBar}>
                 {NAV_ITEMS.map(({ path, label, icon: Icon }) => {
                     const active = isActive(path);
@@ -118,7 +120,7 @@ function Navbar() {
     );
 }
 
-const styles = {
+const styles: Record<string, React.CSSProperties> = {
     header: {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '12px 20px', backgroundColor: theme.colors.white,

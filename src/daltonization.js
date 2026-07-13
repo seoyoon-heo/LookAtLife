@@ -1,5 +1,6 @@
 // src/utils/daltonization.js
 // Python 서버와 동일한 LMS 변환 행렬 사용
+import api, {colorAssistantAPI} from './api/api';
 
 const MATRICES = {
     protanopia: [
@@ -74,17 +75,13 @@ export function applyDaltonization(imageData, colorType) {
  * 마이페이지와 동일한 Python 서버 알고리즘 사용
  */
 export async function getDaltonizedImageUrl(imageUrl, colorType) {
-    const token = localStorage.getItem('token');
 
     // 1단계: Spring Boot 프록시로 S3 이미지 가져오기 (CORS 우회)
-    const proxyUrl = `http://localhost:8080/api/wardrobe/image-proxy?url=${encodeURIComponent(imageUrl)}`;
-    const imageResponse = await fetch(proxyUrl, {
-        headers: { Authorization: `Bearer ${token}` }
-    });
-    if (!imageResponse.ok) throw new Error('이미지 불러오기 실패');
+    const proxyUrl = `/wardrobe/image-proxy?url=${encodeURIComponent(imageUrl)}`;
+    const imageResponse = await api.get(proxyUrl, {responseType: 'blob'});
 
     // 2단계: blob → base64 변환
-    const blob = await imageResponse.blob();
+    const blob = imageResponse.data;
     const base64 = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result); // data:image/jpeg;base64,...
@@ -93,17 +90,9 @@ export async function getDaltonizedImageUrl(imageUrl, colorType) {
     });
 
     // 3단계: 마이페이지와 동일한 엔드포인트 호출
-    const daltonizeResponse = await fetch('http://localhost:8080/api/user/color-assistant/daltonize', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ imageB64: base64, colorType })
-    });
-    if (!daltonizeResponse.ok) throw new Error('보정 실패');
+    const daltonizeResponse = await colorAssistantAPI.daltonize(base64, colorType);
 
-    const result = await daltonizeResponse.json();
+    const result = daltonizeResponse.data;
 
     // 4단계: corrected base64 → Blob URL
     const correctedBase64 = result.corrected; // Python 서버 반환값

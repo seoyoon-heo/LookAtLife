@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import { wardrobeAPI, weatherAPI, calendarAPI, recommendationAPI } from '../api/api';
 import { theme } from '../styles/theme';
+import { pad, toDateStr, formatDate, formatTime, getDday } from '../utils/date';
+import { getWeatherEmoji, getTpoColor, getTpoEmoji } from '../utils/format';
 
 const TPO_LIST = [
     { key: '데이트', emoji: '💑', color: '#FF6B9D' },
@@ -38,19 +40,7 @@ function Recommend() {
     const [loading, setLoading]   = useState(false);
     const [error, setError]       = useState('');
 
-    const pad        = n => String(n).padStart(2,'0');
-    const toDateStr  = d => { const dt=new Date(d); return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`; };
-    const formatDate = d => { const dt=new Date(d); return `${dt.getMonth()+1}월 ${dt.getDate()}일 (${WEEKDAYS[dt.getDay()]})`; };
     const isToday    = d => { const dt=new Date(d); return dt.getFullYear()===today.getFullYear()&&dt.getMonth()===today.getMonth()&&dt.getDate()===today.getDate(); };
-    const getTpoColor   = t => TPO_LIST.find(x=>x.key===t)?.color||theme.colors.primary;
-    const getWeatherEmoji = desc => {
-        if (!desc) return '🌤️';
-        if (desc.includes('맑')) return '☀️';
-        if (desc.includes('구름')) return '⛅';
-        if (desc.includes('비'))  return '🌧️';
-        if (desc.includes('눈'))  return '❄️';
-        return '🌤️';
-    };
 
     useEffect(() => { fetchWeather(today); fetchAllEvents(); }, []);
     useEffect(() => { updateDateEvents(selectedDate); }, [selectedDate, allEvents]);
@@ -142,7 +132,7 @@ function Recommend() {
                 <div style={S.topCard}>
                     <div style={S.dateWeatherRow}>
                         <button style={S.dateBtn} onClick={()=>setShowCalendarPopup(true)}>
-                            <span style={S.dateTxt}>{formatDate(selectedDate)}</span>
+                            <span style={S.dateTxt}>{formatDate(selectedDate, WEEKDAYS)}</span>
                             <span style={S.dateIcon}>📅</span>
                         </button>
                         {!isToday(selectedDate) && (
@@ -232,7 +222,7 @@ function Recommend() {
                     ) : isRetry ? (
                         <span>✨ &nbsp;다른 코디 {numOutfits}가지 더 받기</span>
                     ) : (
-                        <span>🤖 &nbsp;{formatDate(selectedDate)} 코디 추천받기</span>
+                        <span>🤖 &nbsp;{formatDate(selectedDate, WEEKDAYS)} 코디 추천받기</span>
                     )}
                 </button>
 

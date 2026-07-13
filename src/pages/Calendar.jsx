@@ -2,6 +2,11 @@ import React, { useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
 import { calendarAPI, recommendationAPI } from '../api/api';
 import { theme } from '../styles/theme';
+import { getWeatherEmoji, getTpoColor, getTpoEmoji } from '../utils/format';
+import { getDday } from '../utils/date';
+import dayjs from 'dayjs';
+import 'dayjs/locale/ko';
+dayjs.locale('ko');
 
 const TPO_OPTIONS = ['데이트', '직장', '캐주얼', '운동', '파티', '여행', '일상', '격식'];
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -30,7 +35,6 @@ function Calendar() {
     const fetchOutfits = async () => {
         try {
             const now = new Date();
-            const pad = (n) => String(n).padStart(2,'0');
             const start = `${now.getFullYear()}-01-01`;
             const end = `${now.getFullYear()}-12-31`;
             const res = await recommendationAPI.getWeekOutfits(start, end);
@@ -66,13 +70,12 @@ function Calendar() {
         });
 
     const getOutfitsOnDate = (year, month, day) => {
-        const pad = (n) => String(n).padStart(2,'0');
-        const dateStr = `${year}-${pad(month+1)}-${pad(day)}`;
+        const dateStr = dayjs().year(year).month(month).date(day).format('YYYY-MM-DD');
         return outfits.filter(o => o.outfitDate === dateStr);
     };
 
-    const getDaysInMonth = (y, m) => new Date(y, m+1, 0).getDate();
-    const getFirstDay = (y, m) => new Date(y, m, 1).getDay();
+    const getDaysInMonth = (y, m) => dayjs().year(y).month(m).daysInMonth();
+    const getFirstDay = (y, m) => dayjs().year(y).month(m).date(1).day();
 
     const prevMonth = () => {
         if (currentMonth === 0) { setCurrentYear(y => y-1); setCurrentMonth(11); }
@@ -86,36 +89,8 @@ function Calendar() {
         setPopup(null);
     };
 
-    const formatTime = (datetime) => {
-        const d = new Date(datetime);
-        return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
-    };
-
-    const getDday = (datetime) => {
-        const target = new Date(datetime); target.setHours(0,0,0,0);
-        const now = new Date(); now.setHours(0,0,0,0);
-        const diff = Math.round((target - now) / (1000*60*60*24));
-        if (diff === 0) return 'D-Day';
-        if (diff > 0) return `D-${diff}`;
-        return `D+${Math.abs(diff)}`;
-    };
-
-    const getTpoColor = (tpo) => {
-        const map = {
-            '데이트':'#FF6B9D','직장':'#4A90D9','캐주얼':'#7EC8A4',
-            '운동':'#F5A623','파티':'#BD10E0','여행':'#50E3C2','일상':'#9B9B9B','격식':'#4A4A4A'
-        };
-        return map[tpo] || theme.colors.primary;
-    };
-
-    const getTpoEmoji = (tpo) => {
-        const map = { '데이트':'💑','직장':'💼','캐주얼':'👟','운동':'🏃','파티':'🎉','여행':'✈️','일상':'☀️','격식':'👔' };
-        return map[tpo] || '📅';
-    };
-
     const handleDayClick = (day) => {
-        const pad = (n) => String(n).padStart(2,'0');
-        const dateStr = `${currentYear}-${pad(currentMonth+1)}-${pad(day)}T09:00`;
+        const dateStr = dayjs(new Date(currentYear, currentMonth, day)).format('YYYY-MM-DD') + 'T09:00';
         setForm(f => ({ ...f, eventDatetime: dateStr }));
         setShowForm(false);
         setPopup({
@@ -274,7 +249,7 @@ function Calendar() {
                                 <p style={styles.popupDate}>
                                     {popup.month+1}월 {popup.day}일
                                     <span style={styles.popupWeekday}>
-                                        ({WEEKDAYS[new Date(popup.year, popup.month, popup.day).getDay()]})
+                                        ({dayjs(new Date(popup.year, popup.month, popup.day)).format('dd')})
                                     </span>
                                 </p>
                             </div>
@@ -302,7 +277,7 @@ function Calendar() {
                                                 {getDday(ev.eventDatetime)}
                                             </span>
                                         </div>
-                                        <p style={styles.eventTime}>{formatTime(ev.eventDatetime)}</p>
+                                        <p style={styles.eventTime}>{dayjs(ev.eventDatetime).format('A hh:mm')}</p>
                                         <span style={{ ...styles.tpoTag, backgroundColor: getTpoColor(ev.tpoKeyword)+'22', color: getTpoColor(ev.tpoKeyword) }}>
                                             {ev.tpoKeyword}
                                         </span>

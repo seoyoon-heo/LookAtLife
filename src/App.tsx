@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, Outlet } from 'react-router-dom';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Home from './pages/Home';
@@ -7,49 +7,56 @@ import Wardrobe from './pages/Wardrobe';
 import Recommend from './pages/Recommend';
 import Calendar from './pages/Calendar';
 import MyPage from './pages/MyPage';
+import Navbar from './components/Navbar';
 import api from './api/api';
 
-interface AuthGuardProps {
-  children: React.ReactNode;
-}
+function AuthLayout() {
+    const navigate = useNavigate();
 
-function AuthGuard({ children }: AuthGuardProps) {
-  const navigate = useNavigate();
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            navigate('/login', { replace: true });
+            return;
+        }
+        api.get('/user/profile').catch((err) => {
+            if (err.response?.status === 401 || err.response?.status === 403) {
+                localStorage.clear();
+                navigate('/login', { replace: true });
+            }
+        });
+    }, [navigate]);
 
-  useEffect(() => {
     const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/login', { replace: true });
-      return;
-    }
-    api.get('/user/profile').catch((err) => {
-      if (err.response?.status === 401 || err.response?.status === 403) {
-        localStorage.clear();
-        navigate('/login', { replace: true });
-      }
-    });
-  }, [navigate]);
+    if (!token) return <Navigate to="/login" replace />;
 
-  const token = localStorage.getItem('token');
-  if (!token) return <Navigate to="/login" replace />;
-  return <>{children}</>;
+    return (
+        <div style={{ display: 'flex', minHeight: '100vh', background: '#f5f7fa', fontFamily: 'Inter, sans-serif' }}>
+            <Navbar />
+            <main style={{ flex: 1, overflowY: 'auto', minHeight: '100vh' }}>
+                <Outlet />
+            </main>
+        </div>
+    );
 }
 
 function App() {
-  return (
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/" element={<AuthGuard><Home /></AuthGuard>} />
-          <Route path="/wardrobe" element={<AuthGuard><Wardrobe /></AuthGuard>} />
-          <Route path="/recommend" element={<AuthGuard><Recommend /></AuthGuard>} />
-          <Route path="/calendar" element={<AuthGuard><Calendar /></AuthGuard>} />
-          <Route path="/mypage" element={<AuthGuard><MyPage /></AuthGuard>} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
-  );
+    return (
+        <BrowserRouter>
+            <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route path="/signup" element={<Signup />} />
+                <Route element={<AuthLayout />}>
+                    <Route path="/" element={<Home />} />
+                    <Route path="/wardrobe" element={<Wardrobe />} />
+                    <Route path="/recommend" element={<Recommend />} />
+                    <Route path="/calendar" element={<Calendar />} />
+                    <Route path="/mypage" element={<MyPage />} />
+                </Route>
+                <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+        </BrowserRouter>
+    );
 }
 
 export default App;

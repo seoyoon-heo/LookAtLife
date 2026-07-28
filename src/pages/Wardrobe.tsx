@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import Navbar from '../components/Navbar';
+import { usePageAnimation } from '../hooks/usePageAnimation';
 import { wardrobeAPI, userAPI } from '../api/api';
-import { theme } from '../styles/theme';
 import DaltonizedImage from '../components/DaltonizedImage';
 
 const CATEGORIES = ['상의', '하의', '아우터', '원피스', '기타'];
@@ -10,11 +9,6 @@ const COLORS = ['블랙', '화이트', '그레이', '네이비', '블루', '레�
     '와인', '민트', '코랄', '머스타드', '아이보리'];
 const MATERIALS = ['코튼', '데님', '니트', '가죽', '린넨', '폴리에스터', '울', '시폰', '기타'];
 
-const COLOR_TYPE_LABEL: Record<string, string> = {
-    protanopia: '제1색맹(적록)',
-    deuteranopia: '제2색맹(적록)',
-    tritanopia: '제3색맹(청황)',
-};
 
 interface WardrobeItem {
     id: number;
@@ -33,19 +27,21 @@ interface EditForm {
 }
 
 function Wardrobe() {
+    const pageRef = useRef<HTMLDivElement>(null);
+    usePageAnimation(pageRef);
     const [items, setItems] = useState<WardrobeItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState('전체');
+    const [search, setSearch] = useState('');
     const [selectedItem, setSelectedItem] = useState<WardrobeItem | null>(null);
     const [editMode, setEditMode] = useState(false);
     const [editForm, setEditForm] = useState<EditForm>({ category: '', type: '', color: '', material: '' });
     const fileInputRef = useRef<HTMLInputElement>(null);
-
     const [colorType, setColorType] = useState<string | null>(null);
     const [correctionEnabled, setCorrectionEnabled] = useState(false);
 
-    const categories = ['전체', ...CATEGORIES];
+    const categories = ['전체', '상의', '하의', '아우터', '원피스', '기타'];
 
     useEffect(() => {
         fetchWardrobe();
@@ -57,12 +53,8 @@ function Wardrobe() {
             const res = await userAPI.getProfile();
             const ct: string = res.data.colorType;
             setColorType(ct);
-            if (ct && ct !== 'normal') {
-                setCorrectionEnabled(true);
-            }
-        } catch (err) {
-            console.error('프로필 조회 실패', err);
-        }
+            if (ct && ct !== 'normal') setCorrectionEnabled(true);
+        } catch (err) { console.error(err); }
     };
 
     const fetchWardrobe = async () => {
@@ -74,20 +66,24 @@ function Wardrobe() {
         finally { setLoading(false); }
     };
 
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
         setUploading(true);
-        try {
-            const reader = new FileReader();
-            reader.onloadend = async () => {
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+            try {
                 await wardrobeAPI.uploadItem(reader.result as string);
                 await fetchWardrobe();
                 alert('업로드 완료');
-            };
-            reader.readAsDataURL(file);
-        } catch (err) { alert('업로드 실패'); }
-        finally { setUploading(false); e.target.value = ''; }
+            } catch (err) {
+                alert('업로드 실패');
+            } finally {
+                setUploading(false);
+                e.target.value = '';
+            }
+        };
+        reader.readAsDataURL(file);
     };
 
     const handleDelete = async (itemId: number) => {
@@ -112,28 +108,24 @@ function Wardrobe() {
 
     const openPopup = (item: WardrobeItem) => {
         setSelectedItem(item);
-        setEditForm({
-            category: normalizeCategory(item.category),
-            type: item.type || '',
-            color: item.color || '',
-            material: item.material || ''
-        });
+        setEditForm({ category: normalizeCategory(item.category), type: item.type || '', color: item.color || '', material: item.material || '' });
         setEditMode(false);
     };
 
     const normalizeCategory = (category?: string): string => {
         if (!category) return '기타';
         const c = category.trim();
-        if (['상의','탑','top','TOP','티셔츠','셔츠','니트','블라우스','후드','맨투맨'].some(k => c.includes(k))) return '상의';
-        if (['하의','팬츠','바지','스커트','반바지','bottom','BOTTOM'].some(k => c.includes(k))) return '하의';
-        if (['아우터','자켓','재킷','코트','패딩','점퍼','가디건','outer','OUTER'].some(k => c.includes(k))) return '아우터';
-        if (['원피스','드레스','dress','DRESS'].some(k => c.includes(k))) return '원피스';
+        if (['상의', '탑', 'top', 'TOP', '티셔츠', '셔츠', '니트', '블라우스', '후드', '맨투맨'].some(k => c.includes(k))) return '상의';
+        if (['하의', '팬츠', '바지', '스커트', '반바지', 'bottom', 'BOTTOM'].some(k => c.includes(k))) return '하의';
+        if (['아우터', '자켓', '재킷', '코트', '패딩', '점퍼', '가디건', 'outer', 'OUTER'].some(k => c.includes(k))) return '아우터';
+        if (['원피스', '드레스', 'dress', 'DRESS'].some(k => c.includes(k))) return '원피스';
         return c;
     };
 
-    const filteredItems = selectedCategory === '전체'
-        ? items
-        : items.filter(item => normalizeCategory(item.category) === selectedCategory);
+    const filteredItems = items.filter(i =>
+        (selectedCategory === '전체' || normalizeCategory(i.category) === selectedCategory) &&
+        (search === '' || (i.type || '').includes(search))
+    );
 
     const getCategoryCount = (cat: string): number => {
         if (cat === '전체') return items.length;
@@ -142,29 +134,13 @@ function Wardrobe() {
 
     const getColorHex = (colorName?: string): string => {
         const map: Record<string, string> = {
-            '블랙': '#1a1a1a', '검정': '#1a1a1a',
-            '화이트': '#f5f5f5', '흰색': '#f5f5f5', '흰': '#f5f5f5',
-            '그레이': '#95a5a6', '회색': '#95a5a6',
-            '아이보리': '#f5f0dc', '크림': '#fffdd0',
-            '네이비': '#1a2a5e', '남색': '#1a2a5e',
-            '블루': '#3498db', '파랑': '#3498db', '파란': '#3498db',
-            '하늘': '#87CEEB', '스카이': '#87CEEB', '청': '#4169E1',
-            '레드': '#e74c3c', '빨강': '#e74c3c', '빨간': '#e74c3c', '적색': '#e74c3c',
-            '핑크': '#ff6b9d', '분홍': '#ff6b9d',
-            '코랄': '#FF6B6B', '살구': '#FDBCB4',
-            '와인': '#722F37', '버건디': '#800020', '마룬': '#800000',
-            '옐로우': '#f1c40f', '노랑': '#f1c40f', '노란': '#f1c40f', '황색': '#f1c40f',
-            '오렌지': '#e67e22', '주황': '#e67e22', '머스타드': '#FFDB58',
-            '그린': '#2ecc71', '초록': '#2ecc71', '녹색': '#2ecc71',
-            '카키': '#8B8B6A', '올리브': '#808000', '민트': '#98FF98', '연두': '#90EE90',
-            '브라운': '#8B4513', '갈색': '#8B4513', '갈': '#8B4513',
-            '카멜': '#C19A6B', '카라멜': '#C19A6B',
-            '베이지': '#f5f0e8', '샌드': '#C2B280', '탄': '#D2B48C', '누드': '#E8C9A0',
-            '퍼플': '#9b59b6', '보라': '#9b59b6', '자주': '#800080',
-            '라벤더': '#E6E6FA', '연보라': '#DDA0DD', '바이올렛': '#EE82EE',
-            '실버': '#C0C0C0', '골드': '#FFD700',
+            '블랙': '#1a1a1a', '화이트': '#f5f5f5', '그레이': '#95a5a6',
+            '아이보리': '#f5f0dc', '네이비': '#1a2a5e', '블루': '#3498db',
+            '레드': '#e74c3c', '핑크': '#ff6b9d', '옐로우': '#f1c40f',
+            '그린': '#2ecc71', '카키': '#8B8B6A', '브라운': '#8B4513',
+            '베이지': '#f5f0e8', '퍼플': '#9b59b6', '오렌지': '#e67e22',
+            '와인': '#722F37', '민트': '#98FF98', '코랄': '#FF6B6B', '머스타드': '#FFDB58',
         };
-
         if (!colorName) return '#e0e0e0';
         for (const [key, val] of Object.entries(map)) {
             if (colorName.includes(key)) return val;
@@ -174,228 +150,243 @@ function Wardrobe() {
 
     const hasColorDeficiency = colorType && colorType !== 'normal';
 
+    const statsData = [
+        { label: '전체 아이템', value: items.length, color: '#71b3e5' },
+        { label: '즐겨찾기', value: getCategoryCount('즐겨찾기'), color: '#84c98e' },
+        { label: '이번달 착용', value: getCategoryCount('이번달 착용'), color: '#d45acc' },
+    ];
+
     return (
-        <div style={styles.page}>
-            <Navbar />
-            <div style={styles.container}>
-
-                <div style={styles.header}>
-                    <div>
-                        <h1 style={styles.title}>내 옷장</h1>
-                        <p style={styles.subtitle}>총 {items.length}벌</p>
+        <div ref={pageRef} style={{ padding: '70px 36px', maxWidth: 1100, width: '100%' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 28 }}>
+                <div>
+                    <div style={{ overflow: 'hidden' }}>
+                        <h1 style={{ fontFamily: 'Hahmlet, sans-serif', fontWeight: 700, fontSize: 28, color: '#1a1a2e', margin: 0, letterSpacing: '-0.5px' }}>
+                            내 옷장
+                        </h1>
                     </div>
-                    <button style={styles.uploadBtn}
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={uploading}>
-                        {uploading ? '업로드 중...' : '+ 옷 추가'}
-                    </button>
-                    <input ref={fileInputRef} type="file" accept="image/*"
-                           style={{ display: 'none' }} onChange={handleFileChange} />
+                    <p data-sub style={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: 14, color: '#888', margin: '6px 0 0' }}>
+                        {items.length}개의 아이템이 등록되어 있어요
+                    </p>
                 </div>
-
-                {hasColorDeficiency && (
-                    <div style={{
-                        ...styles.correctionBanner,
-                        backgroundColor: correctionEnabled ? theme.colors.primaryLight : '#f5f5f5',
-                        borderColor: correctionEnabled ? theme.colors.primary : '#e0e0e0',
-                    }}>
-                        <div>
-                            <span style={styles.correctionTitle}>색약 보정 모드</span>
-                            <span style={styles.correctionSub}>
-                                {colorType ? COLOR_TYPE_LABEL[colorType] : ''}
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    {hasColorDeficiency && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: correctionEnabled ? 'rgba(113,179,229,0.1)' : '#f5f5f5', border: `1px solid ${correctionEnabled ? '#71b3e5' : '#e0e0e0'}`, borderRadius: 12, padding: '8px 14px' }}>
+                            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: correctionEnabled ? '#71b3e5' : '#888' }}>
+                                색약 보정 {correctionEnabled ? 'ON' : 'OFF'}
                             </span>
+                            <button
+                                onClick={() => setCorrectionEnabled(p => !p)}
+                                style={{ width: 36, height: 20, borderRadius: 10, background: correctionEnabled ? '#71b3e5' : '#ccc', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s' }}
+                            >
+                                <div style={{ position: 'absolute', top: 2, left: correctionEnabled ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: 'white', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                            </button>
                         </div>
-                        <div style={styles.toggleWrapper}
-                             onClick={() => setCorrectionEnabled(prev => !prev)}>
-                            <span style={{
-                                fontSize: '12px',
-                                color: correctionEnabled ? theme.colors.primary : theme.colors.textSub,
-                                fontWeight: correctionEnabled ? '600' : '400'
-                            }}>
-                                {correctionEnabled ? 'ON' : 'OFF'}
-                            </span>
-                            <div style={{
-                                ...styles.toggleTrack,
-                                backgroundColor: correctionEnabled ? theme.colors.primary : '#ccc',
-                            }}>
-                                <div style={{
-                                    ...styles.toggleThumb,
-                                    left: correctionEnabled ? '22px' : '2px',
-                                }} />
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                <div style={styles.filterRow}>
-                    {categories.map(cat => (
-                        <button key={cat} style={{
-                            ...styles.filterBtn,
-                            backgroundColor: selectedCategory === cat ? theme.colors.primary : theme.colors.white,
-                            color: selectedCategory === cat ? theme.colors.white : theme.colors.textSub,
-                            boxShadow: selectedCategory === cat ? 'none' : '0 1px 4px rgba(0,0,0,0.06)'
-                        }} onClick={() => setSelectedCategory(cat)}>
-                            {cat}
-                            <span style={{
-                                ...styles.categoryCount,
-                                backgroundColor: selectedCategory === cat ? 'rgba(255,255,255,0.3)' : theme.colors.primaryLight,
-                                color: selectedCategory === cat ? theme.colors.white : theme.colors.primary
-                            }}>
-                                {getCategoryCount(cat)}
-                            </span>
-                        </button>
-                    ))}
+                    )}
                 </div>
-
-                {loading ? (
-                    <div style={styles.emptyBox}>
-                        <p style={styles.emptyText}>불러오는 중...</p>
-                    </div>
-                ) : filteredItems.length === 0 ? (
-                    <div style={styles.emptyBox}>
-                        <p style={styles.emptyEmoji}>👗</p>
-                        <p style={styles.emptyText}>
-                            {selectedCategory === '전체'
-                                ? '옷장이 비어있습니다.'
-                                : `${selectedCategory} 카테고리에 옷이 없습니다.`}
-                        </p>
-                        <p style={styles.emptySubText}>오른쪽 상단 버튼으로 옷을 추가해보세요</p>
-                    </div>
-                ) : (
-                    <div style={styles.grid}>
-                        {filteredItems.map(item => (
-                            <div key={item.id} style={styles.card} onClick={() => openPopup(item)}>
-                                {item.imageUrl ? (
-                                    <DaltonizedImage
-                                        src={item.imageUrl}
-                                        alt={item.type || ''}
-                                        colorType={colorType || 'normal'}
-                                        correctionEnabled={correctionEnabled}
-                                        imgStyle={styles.image}
-                                    />
-                                ) : (
-                                    <div style={styles.imagePlaceholder}>
-                                        <span style={{ fontSize: '32px' }}>👗</span>
-                                    </div>
-                                )}
-                                <div style={styles.cardInfo}>
-                                    <span style={styles.cardCategory}>
-                                        {normalizeCategory(item.category)}
-                                    </span>
-                                    <p style={styles.cardType}>{item.type}</p>
-                                    <div style={styles.cardColorRow}>
-                                        <div style={{
-                                            width: '10px', height: '10px', borderRadius: '50%',
-                                            backgroundColor: getColorHex(item.color),
-                                            border: '1px solid #e0e0e0', flexShrink: 0
-                                        }} />
-                                        <span style={styles.cardColor}>{item.color}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
             </div>
 
+            {/* Stats */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
+                {statsData.map(({ label, value, color }) => (
+                    <div data-card key={label} style={{ background: 'white', borderRadius: 16, padding: '18px 20px', border: '1px solid #eaedf2', display: 'flex', alignItems: 'center', gap: 14 }}>
+                        <div style={{ width: 44, height: 44, borderRadius: 12, background: color + '18', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <span style={{ fontFamily: 'Hahmlet, sans-serif', fontWeight: 700, fontSize: 18, color }}>{value}</span>
+                        </div>
+                        <span style={{ fontFamily: 'Kedebideri, sans-serif', fontWeight: 400, fontSize: 13, color: '#666' }}>{label}</span>
+                    </div>
+                ))}
+            </div>
+
+            {/* Search + filter */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+                <div style={{ width: 260, flexShrink: 0, background: 'white', border: '1px solid #eaedf2', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ color: '#aaa', fontSize: 14 }}>🔍</span>
+                    <input
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="아이템 검색..."
+                        style={{ border: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: 14, color: '#333', background: 'transparent', flex: 1, minWidth: 0 }}
+                    />
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    {categories.map((cat) => {
+                        const isActive = cat === selectedCategory;
+                        return (
+                            <button
+                                key={cat}
+                                onClick={() => setSelectedCategory(cat)}
+                                style={{
+                                    background: isActive ? 'linear-gradient(135deg, #71b3e5, #5a9fd4)' : 'white',
+                                    border: isActive ? 'none' : '1px solid #eaedf2',
+                                    borderRadius: 10, padding: '8px 16px',
+                                    fontFamily: 'Kedebideri, sans-serif', fontWeight: isActive ? 600 : 400,
+                                    fontSize: 13, color: isActive ? 'white' : '#555', cursor: 'pointer', whiteSpace: 'nowrap',
+                                }}
+                            >
+                                {cat}
+                            </button>
+                        );
+                    })}
+                    <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploading}
+                        style={{
+                            background: 'linear-gradient(135deg, #71b3e5, #5a9fd4)',
+                            border: 'none', borderRadius: 10, padding: '8px 16px',
+                            fontFamily: 'Kedebideri, sans-serif', fontWeight: 600, fontSize: 13,
+                            color: 'white', cursor: 'pointer', whiteSpace: 'nowrap',
+                        }}
+                    >
+                        {uploading ? '업로드 중...' : '+ 아이템 추가'}
+                    </button>
+                    <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
+                </div>
+            </div>
+
+            {/* Grid */}
+            {loading ? (
+                <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                    <p style={{ fontFamily: 'Kedebideri, sans-serif', color: '#aaa', fontSize: 14 }}>불러오는 중...</p>
+                </div>
+            ) : filteredItems.length === 0 ? (
+                <div style={{ background: 'white', borderRadius: 20, padding: '60px', textAlign: 'center', border: '1px solid #eaedf2' }}>
+                    <p style={{ fontSize: 48, margin: '0 0 12px' }}>👗</p>
+                    <p style={{ fontFamily: 'Hahmlet, sans-serif', fontWeight: 600, fontSize: 16, color: '#1a1a2e', margin: '0 0 8px' }}>
+                        {selectedCategory === '전체' ? '옷장이 비어있어요' : `${selectedCategory} 카테고리에 아이템이 없어요`}
+                    </p>
+                    <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#aaa', margin: 0 }}>
+                        위 버튼으로 아이템을 추가해보세요
+                    </p>
+                </div>
+            ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 16 }}>
+                    {filteredItems.map(item => (
+                        <div
+                            data-scroll-card
+                            key={item.id}
+                            style={{ background: 'white', border: '1px solid #eaedf2', borderRadius: 18, overflow: 'hidden', cursor: 'pointer', transition: 'box-shadow 0.2s, transform 0.2s' }}
+                            onClick={() => openPopup(item)}
+                            onMouseEnter={(e) => {
+                                (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 24px rgba(0,0,0,0.1)';
+                                (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)';
+                            }}
+                            onMouseLeave={(e) => {
+                                (e.currentTarget as HTMLElement).style.boxShadow = 'none';
+                                (e.currentTarget as HTMLElement).style.transform = 'none';
+                            }}
+                        >
+                            {item.imageUrl ? (
+                                <DaltonizedImage
+                                    src={item.imageUrl}
+                                    alt={item.type || ''}
+                                    colorType={colorType || 'normal'}
+                                    correctionEnabled={correctionEnabled}
+                                    imgStyle={{ width: '100%', height: 140, objectFit: 'cover', display: 'block' }}
+                                />
+                            ) : (
+                                <div style={{ height: 140, background: getColorHex(item.color), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 44 }}>
+                                    👗
+                                </div>
+                            )}
+                            <div style={{ padding: '12px 14px' }}>
+                                <p style={{ fontFamily: 'Hahmlet, sans-serif', fontWeight: 600, fontSize: 13, color: '#1a1a2e', margin: 0 }}>
+                                    {item.type || '아이템'}
+                                </p>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                                    <span style={{ background: 'rgba(113,179,229,0.12)', borderRadius: 8, padding: '2px 8px', fontFamily: 'Kedebideri, sans-serif', fontWeight: 400, fontSize: 10, color: '#71b3e5' }}>
+                                        {normalizeCategory(item.category)}
+                                    </span>
+                                    {item.color && (
+                                        <span style={{ background: 'rgba(113,179,229,0.12)', borderRadius: 8, padding: '2px 8px', fontFamily: 'Kedebideri, sans-serif', fontWeight: 400, fontSize: 10, color: '#71b3e5' }}>
+                                            {item.color}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Item Detail Popup */}
             {selectedItem && (
                 <>
-                    <div style={styles.overlay}
-                         onClick={() => { setSelectedItem(null); setEditMode(false); }} />
-                    <div style={styles.popup}>
-                        <div style={styles.popupHeader}>
-                            <h2 style={styles.popupTitle}>옷 상세 정보</h2>
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 200 }}
+                        onClick={() => { setSelectedItem(null); setEditMode(false); }} />
+                    <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: 'white', borderRadius: 24, width: 380, maxWidth: '90vw', maxHeight: '85vh', overflowY: 'auto', zIndex: 201, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 20px 0', marginBottom: 16 }}>
+                            <h2 style={{ fontFamily: 'Hahmlet, sans-serif', fontWeight: 700, fontSize: 18, color: '#1a1a2e', margin: 0 }}>옷 상세 정보</h2>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                                 {!editMode ? (
-                                    <button style={styles.editBtn}
-                                            onClick={() => setEditMode(true)}>수정</button>
+                                    <button onClick={() => setEditMode(true)} style={{ padding: '6px 14px', background: 'rgba(113,179,229,0.12)', color: '#71b3e5', border: 'none', borderRadius: 999, fontSize: 13, cursor: 'pointer', fontFamily: 'Kedebideri, sans-serif', fontWeight: 500 }}>수정</button>
                                 ) : (
                                     <>
-                                        <button style={styles.saveBtn} onClick={handleEdit}>저장</button>
-                                        <button style={styles.cancelBtn}
-                                                onClick={() => setEditMode(false)}>취소</button>
+                                        <button onClick={handleEdit} style={{ padding: '6px 14px', background: 'linear-gradient(135deg, #71b3e5, #5a9fd4)', color: 'white', border: 'none', borderRadius: 999, fontSize: 13, cursor: 'pointer', fontFamily: 'Kedebideri, sans-serif', fontWeight: 600 }}>저장</button>
+                                        <button onClick={() => setEditMode(false)} style={{ padding: '6px 14px', background: '#f5f7fa', color: '#888', border: 'none', borderRadius: 999, fontSize: 13, cursor: 'pointer' }}>취소</button>
                                     </>
                                 )}
-                                <button style={styles.closeBtn}
-                                        onClick={() => { setSelectedItem(null); setEditMode(false); }}>
-                                    ✕
-                                </button>
+                                <button onClick={() => { setSelectedItem(null); setEditMode(false); }} style={{ background: 'none', border: 'none', fontSize: 18, color: '#999', cursor: 'pointer' }}>✕</button>
                             </div>
                         </div>
 
-                        <div style={styles.popupImageBox}>
+                        <div style={{ padding: '0 20px', marginBottom: 16 }}>
                             {selectedItem.imageUrl ? (
                                 <DaltonizedImage
                                     src={selectedItem.imageUrl}
                                     alt={selectedItem.type || ''}
                                     colorType={colorType || 'normal'}
                                     correctionEnabled={correctionEnabled}
-                                    imgStyle={styles.popupImage}
+                                    imgStyle={{ width: '100%', height: 260, objectFit: 'cover', borderRadius: 16, display: 'block' }}
                                 />
                             ) : (
-                                <div style={styles.popupImagePlaceholder}>
-                                    <span style={{ fontSize: '48px' }}>👗</span>
+                                <div style={{ width: '100%', height: 260, background: getColorHex(selectedItem.color), borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 60 }}>
+                                    👗
                                 </div>
                             )}
                         </div>
 
                         {!editMode ? (
-                            <div style={styles.popupInfo}>
+                            <div style={{ padding: '0 20px', marginBottom: 16 }}>
                                 {[
                                     { label: '카테고리', value: normalizeCategory(selectedItem.category) },
                                     { label: '종류', value: selectedItem.type || '-' },
+                                    { label: '색상', value: selectedItem.color || '-' },
                                     { label: '소재', value: selectedItem.material || '-' },
                                 ].map(row => (
-                                    <div key={row.label} style={styles.infoRow}>
-                                        <span style={styles.infoLabel}>{row.label}</span>
-                                        <span style={styles.infoValue}>{row.value}</span>
+                                    <div key={row.label} style={{ display: 'flex', alignItems: 'center', padding: '11px 0', borderBottom: '1px solid #f0f0f0' }}>
+                                        <span style={{ width: 70, fontSize: 13, color: '#888', flexShrink: 0, fontFamily: 'Inter, sans-serif' }}>{row.label}</span>
+                                        <span style={{ fontSize: 14, color: '#1a1a2e', fontWeight: 500, fontFamily: 'Hahmlet, sans-serif' }}>{row.value}</span>
                                     </div>
                                 ))}
-                                <div style={styles.infoRow}>
-                                    <span style={styles.infoLabel}>색상</span>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <div style={{
-                                            width: '16px', height: '16px', borderRadius: '50%',
-                                            backgroundColor: getColorHex(selectedItem.color),
-                                            border: '1px solid #e0e0e0'
-                                        }} />
-                                        <span style={styles.infoValue}>{selectedItem.color || '-'}</span>
-                                    </div>
-                                </div>
                             </div>
                         ) : (
-                            <div style={styles.popupInfo}>
-                                <div style={styles.editRow}>
-                                    <span style={styles.infoLabel}>카테고리</span>
-                                    <select style={styles.editSelect} value={editForm.category}
-                                            onChange={e => setEditForm({ ...editForm, category: e.target.value })}>
+                            <div style={{ padding: '0 20px', marginBottom: 16 }}>
+                                <div style={{ display: 'flex', alignItems: 'flex-start', padding: '11px 0', borderBottom: '1px solid #f0f0f0', gap: 12 }}>
+                                    <span style={{ width: 70, fontSize: 13, color: '#888', flexShrink: 0, paddingTop: 2, fontFamily: 'Inter, sans-serif' }}>카테고리</span>
+                                    <select style={{ flex: 1, padding: '8px 10px', borderRadius: 10, border: '1px solid #eaedf2', fontSize: 14, background: 'white' }} value={editForm.category} onChange={e => setEditForm({ ...editForm, category: e.target.value })}>
                                         {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                                     </select>
                                 </div>
-                                <div style={styles.editRow}>
-                                    <span style={styles.infoLabel}>종류</span>
-                                    <input style={styles.editInput} value={editForm.type}
-                                           onChange={e => setEditForm({ ...editForm, type: e.target.value })}
-                                           placeholder="예: 티셔츠, 청바지" />
+                                <div style={{ display: 'flex', alignItems: 'flex-start', padding: '11px 0', borderBottom: '1px solid #f0f0f0', gap: 12 }}>
+                                    <span style={{ width: 70, fontSize: 13, color: '#888', flexShrink: 0, paddingTop: 2, fontFamily: 'Inter, sans-serif' }}>종류</span>
+                                    <input style={{ flex: 1, padding: '8px 10px', borderRadius: 10, border: '1px solid #eaedf2', fontSize: 14, boxSizing: 'border-box' }} value={editForm.type} onChange={e => setEditForm({ ...editForm, type: e.target.value })} placeholder="예: 티셔츠, 청바지" />
                                 </div>
-                                <div style={styles.editRow}>
-                                    <span style={styles.infoLabel}>색상</span>
+                                <div style={{ display: 'flex', alignItems: 'flex-start', padding: '11px 0', borderBottom: '1px solid #f0f0f0', gap: 12 }}>
+                                    <span style={{ width: 70, fontSize: 13, color: '#888', flexShrink: 0, paddingTop: 2, fontFamily: 'Inter, sans-serif' }}>색상</span>
                                     <div style={{ flex: 1 }}>
-                                        <select style={styles.editSelect} value={editForm.color}
-                                                onChange={e => setEditForm({ ...editForm, color: e.target.value })}>
+                                        <select style={{ width: '100%', padding: '8px 10px', borderRadius: 10, border: '1px solid #eaedf2', fontSize: 14, background: 'white', marginBottom: 6 }} value={editForm.color} onChange={e => setEditForm({ ...editForm, color: e.target.value })}>
                                             <option value="">선택</option>
                                             {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
                                         </select>
-                                        <input style={{ ...styles.editInput, marginTop: '6px' }}
-                                               value={editForm.color}
-                                               onChange={e => setEditForm({ ...editForm, color: e.target.value })}
-                                               placeholder="직접 입력" />
+                                        <input style={{ width: '100%', padding: '8px 10px', borderRadius: 10, border: '1px solid #eaedf2', fontSize: 14, boxSizing: 'border-box' }} value={editForm.color} onChange={e => setEditForm({ ...editForm, color: e.target.value })} placeholder="직접 입력" />
                                     </div>
                                 </div>
-                                <div style={styles.editRow}>
-                                    <span style={styles.infoLabel}>소재</span>
-                                    <select style={styles.editSelect} value={editForm.material}
-                                            onChange={e => setEditForm({ ...editForm, material: e.target.value })}>
+                                <div style={{ display: 'flex', alignItems: 'flex-start', padding: '11px 0', gap: 12 }}>
+                                    <span style={{ width: 70, fontSize: 13, color: '#888', flexShrink: 0, paddingTop: 2, fontFamily: 'Inter, sans-serif' }}>소재</span>
+                                    <select style={{ flex: 1, padding: '8px 10px', borderRadius: 10, border: '1px solid #eaedf2', fontSize: 14, background: 'white' }} value={editForm.material} onChange={e => setEditForm({ ...editForm, material: e.target.value })}>
                                         <option value="">선택</option>
                                         {MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}
                                     </select>
@@ -403,8 +394,10 @@ function Wardrobe() {
                             </div>
                         )}
 
-                        <button style={styles.deleteBtn}
-                                onClick={() => handleDelete(selectedItem.id)}>
+                        <button
+                            onClick={() => handleDelete(selectedItem.id)}
+                            style={{ width: 'calc(100% - 40px)', margin: '0 20px 20px', padding: 12, background: 'white', color: '#FF5A5A', border: '1px solid #FF5A5A', borderRadius: 12, fontSize: 14, cursor: 'pointer', fontFamily: 'Kedebideri, sans-serif', fontWeight: 500 }}
+                        >
                             옷장에서 삭제
                         </button>
                     </div>
@@ -413,68 +406,5 @@ function Wardrobe() {
         </div>
     );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-    page: { backgroundColor: theme.colors.background, minHeight: '100vh' },
-    container: { maxWidth: '480px', margin: '0 auto', padding: '20px 20px 90px' },
-    header: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px' },
-    title: { fontSize: '22px', fontWeight: '700', color: theme.colors.text, margin: '0 0 4px' },
-    subtitle: { fontSize: '13px', color: theme.colors.textSub, margin: 0 },
-    uploadBtn: {
-        padding: '10px 18px', backgroundColor: theme.colors.primary, color: theme.colors.white,
-        border: 'none', borderRadius: theme.radius.full, fontSize: '13px',
-        cursor: 'pointer', fontWeight: '600', flexShrink: 0
-    },
-    correctionBanner: {
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '10px 14px', borderRadius: theme.radius.lg,
-        border: '1px solid', marginBottom: '16px',
-        transition: 'background-color 0.2s, border-color 0.2s'
-    },
-    correctionTitle: { fontSize: '13px', fontWeight: '600', color: theme.colors.primary, marginRight: '6px' },
-    correctionSub: { fontSize: '12px', color: theme.colors.textSub },
-    toggleWrapper: { display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer' },
-    toggleTrack: { width: '44px', height: '24px', borderRadius: '12px', position: 'relative', transition: 'background-color 0.2s', flexShrink: 0 },
-    toggleThumb: { position: 'absolute', top: '2px', width: '20px', height: '20px', borderRadius: '50%', backgroundColor: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transition: 'left 0.2s' },
-    filterRow: { display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' },
-    filterBtn: {
-        display: 'flex', alignItems: 'center', gap: '6px',
-        padding: '7px 12px', border: 'none', borderRadius: theme.radius.full,
-        fontSize: '13px', cursor: 'pointer', fontWeight: '500'
-    },
-    categoryCount: { padding: '1px 7px', borderRadius: theme.radius.full, fontSize: '11px', fontWeight: '600' },
-    emptyBox: { backgroundColor: theme.colors.white, borderRadius: theme.radius.xl, padding: '60px', textAlign: 'center', boxShadow: theme.colors.cardShadow },
-    emptyEmoji: { fontSize: '48px', margin: '0 0 12px' },
-    emptyText: { color: theme.colors.text, fontSize: '15px', fontWeight: '500', margin: '0 0 8px' },
-    emptySubText: { color: theme.colors.textLight, fontSize: '13px', margin: 0 },
-    grid: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' },
-    card: { backgroundColor: theme.colors.white, borderRadius: theme.radius.lg, overflow: 'hidden', boxShadow: theme.colors.cardShadow, cursor: 'pointer' },
-    image: { width: '100%', height: '180px', objectFit: 'cover', display: 'block' },
-    imagePlaceholder: { width: '100%', height: '180px', backgroundColor: theme.colors.primaryLight, display: 'flex', alignItems: 'center', justifyContent: 'center' },
-    cardInfo: { padding: '10px 12px' },
-    cardCategory: { fontSize: '10px', color: theme.colors.primary, backgroundColor: theme.colors.primaryLight, padding: '2px 8px', borderRadius: theme.radius.full, display: 'inline-block', marginBottom: '6px', fontWeight: '600' },
-    cardType: { fontSize: '14px', fontWeight: '600', color: theme.colors.text, margin: '0 0 4px' },
-    cardColorRow: { display: 'flex', alignItems: 'center', gap: '5px' },
-    cardColor: { fontSize: '12px', color: theme.colors.textSub },
-    overlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 200 },
-    popup: { position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: theme.colors.white, borderRadius: theme.radius.xl, width: '360px', maxWidth: '90vw', maxHeight: '85vh', overflowY: 'auto', zIndex: 201, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' },
-    popupHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 20px 0', marginBottom: '16px' },
-    popupTitle: { fontSize: '17px', fontWeight: '700', color: theme.colors.text, margin: 0 },
-    editBtn: { padding: '6px 14px', backgroundColor: theme.colors.primaryLight, color: theme.colors.primary, border: 'none', borderRadius: theme.radius.full, fontSize: '13px', cursor: 'pointer', fontWeight: '500' },
-    saveBtn: { padding: '6px 14px', backgroundColor: theme.colors.primary, color: theme.colors.white, border: 'none', borderRadius: theme.radius.full, fontSize: '13px', cursor: 'pointer', fontWeight: '600' },
-    cancelBtn: { padding: '6px 14px', backgroundColor: theme.colors.background, color: theme.colors.textSub, border: 'none', borderRadius: theme.radius.full, fontSize: '13px', cursor: 'pointer' },
-    closeBtn: { background: 'none', border: 'none', fontSize: '18px', color: '#999', cursor: 'pointer' },
-    popupImageBox: { padding: '0 20px', marginBottom: '16px' },
-    popupImage: { width: '100%', height: '260px', objectFit: 'cover', borderRadius: theme.radius.lg, display: 'block' },
-    popupImagePlaceholder: { width: '100%', height: '260px', backgroundColor: theme.colors.primaryLight, borderRadius: theme.radius.lg, display: 'flex', alignItems: 'center', justifyContent: 'center' },
-    popupInfo: { padding: '0 20px', marginBottom: '16px' },
-    infoRow: { display: 'flex', alignItems: 'center', padding: '11px 0', borderBottom: `1px solid ${theme.colors.border}` },
-    editRow: { display: 'flex', alignItems: 'flex-start', padding: '11px 0', borderBottom: `1px solid ${theme.colors.border}`, gap: '12px' },
-    infoLabel: { width: '70px', fontSize: '13px', color: theme.colors.textSub, flexShrink: 0, paddingTop: '2px' },
-    infoValue: { fontSize: '14px', color: theme.colors.text, fontWeight: '500' },
-    editSelect: { flex: 1, width: '100%', padding: '8px 10px', borderRadius: theme.radius.md, border: `1px solid ${theme.colors.border}`, fontSize: '14px', backgroundColor: theme.colors.white },
-    editInput: { flex: 1, width: '100%', padding: '8px 10px', borderRadius: theme.radius.md, border: `1px solid ${theme.colors.border}`, fontSize: '14px', boxSizing: 'border-box' },
-    deleteBtn: { width: 'calc(100% - 40px)', margin: '0 20px 20px', padding: '12px', backgroundColor: theme.colors.white, color: theme.colors.danger, border: `1px solid ${theme.colors.danger}`, borderRadius: theme.radius.lg, fontSize: '14px', cursor: 'pointer', fontWeight: '500' }
-};
 
 export default Wardrobe;

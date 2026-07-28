@@ -1,16 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import Navbar from '../components/Navbar';
 import { calendarAPI, recommendationAPI } from '../api/api';
-import { theme } from '../styles/theme';
-import { getWeatherEmoji, getTpoColor, getTpoEmoji } from '../utils/format';
-import { getDday } from '../utils/date';
+import { WardrobeIcon } from '../components/Icons';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 dayjs.locale('ko');
 
 const TPO_OPTIONS = ['데이트', '직장', '캐주얼', '운동', '파티', '여행', '일상', '격식'];
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
-const MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12];
+const DAY_EN = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+const TPO_COLORS: Record<string, string> = {
+    '데이트': '#FF6B9D', '직장': '#5B8FF9', '캐주얼': '#5AD8A6',
+    '운동': '#F6AE2D', '파티': '#9B59B6', '여행': '#1ABC9C', '일상': '#8C9BAB', '격식': '#4A5568',
+};
+
+const START_HOUR = 8;
+const END_HOUR = 22;
+const HOUR_H = 64;
 
 interface CalendarEvent {
     eventId: number;
@@ -19,23 +25,11 @@ interface CalendarEvent {
     tpoKeyword: string;
 }
 
-interface OutfitMatchedItem {
-    imageUrl?: string;
-}
-
 interface Outfit {
     outfitDate: string;
     style?: string;
     description?: string;
-    matchedItems?: OutfitMatchedItem[];
-}
-
-interface PopupState {
-    year: number;
-    month: number;
-    day: number;
-    events: CalendarEvent[];
-    outfits: Outfit[];
+    matchedItems?: { imageUrl?: string }[];
 }
 
 interface EventForm {
@@ -44,40 +38,50 @@ interface EventForm {
     tpoKeyword: string;
 }
 
+function getWeekMonday(date: Date): Date {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    d.setHours(0, 0, 0, 0);
+    return d;
+}
+
 function Calendar() {
     const today = new Date();
     const [events, setEvents] = useState<CalendarEvent[]>([]);
     const [outfits, setOutfits] = useState<Outfit[]>([]);
-    const [currentYear, setCurrentYear] = useState(today.getFullYear());
-    const [currentMonth, setCurrentMonth] = useState(today.getMonth());
-    const [showMonthPicker, setShowMonthPicker] = useState(false);
-    const [popup, setPopup] = useState<PopupState | null>(null);
+    const [calYear, setCalYear] = useState(today.getFullYear());
+    const [calMonth, setCalMonth] = useState(today.getMonth());
+    const [weekBase, setWeekBase] = useState<Date>(today);
     const [showForm, setShowForm] = useState(false);
     const [form, setForm] = useState<EventForm>({ eventName: '', eventDatetime: '', tpoKeyword: '일상' });
+    const [activeEvent, setActiveEvent] = useState<CalendarEvent | null>(null);
 
+    const weekStart = getWeekMonday(weekBase);
+    const weekDays = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(weekStart);
+        d.setDate(weekStart.getDate() + i);
+        return d;
+    });
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { fetchEvents(); fetchOutfits(); }, []);
 
     const fetchEvents = async () => {
-        try {
-            const res = await calendarAPI.getEvents();
-            setEvents(res.data);
-        } catch (err) { console.error(err); }
+        try { const res = await calendarAPI.getEvents(); setEvents(res.data); } catch (err) { console.error(err); }
     };
 
     const fetchOutfits = async () => {
         try {
             const now = new Date();
-            const start = `${now.getFullYear()}-01-01`;
-            const end = `${now.getFullYear()}-12-31`;
-            const res = await recommendationAPI.getWeekOutfits(start, end);
+            const res = await recommendationAPI.getWeekOutfits(`${now.getFullYear()}-01-01`, `${now.getFullYear()}-12-31`);
             setOutfits(res.data || []);
         } catch (err) { console.error(err); }
     };
 
     const handleAddEvent = async () => {
-        if (!form.eventName || !form.eventDatetime) {
-            alert('일정 이름과 날짜를 입력해주세요.'); return;
-        }
+        if (!form.eventName || !form.eventDatetime) { alert('일정 이름과 날짜를 입력해주세요.'); return; }
         try {
             await calendarAPI.addEvent(form);
             setForm({ eventName: '', eventDatetime: '', tpoKeyword: '일상' });
@@ -91,262 +95,312 @@ function Calendar() {
         try {
             await calendarAPI.deleteEvent(eventId);
             setEvents(events.filter(e => e.eventId !== eventId));
-            setPopup(null);
+            setActiveEvent(null);
         } catch (err) { alert('삭제 실패'); }
     };
 
-    const getEventsOnDate = (year: number, month: number, day: number): CalendarEvent[] =>
+    const daysInMonth = dayjs().year(calYear).month(calMonth).daysInMonth();
+    const firstDay = dayjs().year(calYear).month(calMonth).date(1).day();
+
+    const prevMonth = () => {
+        if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11); }
+        else setCalMonth(m => m - 1);
+    };
+    const nextMonth = () => {
+        if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0); }
+        else setCalMonth(m => m + 1);
+    };
+    const prevWeek = () => { const d = new Date(weekBase); d.setDate(d.getDate() - 7); setWeekBase(d); };
+    const nextWeek = () => { const d = new Date(weekBase); d.setDate(d.getDate() + 7); setWeekBase(d); };
+
+    const getEventsOnDay = (date: Date): CalendarEvent[] =>
         events.filter(e => {
             const d = new Date(e.eventDatetime);
-            return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day;
+            return d.getFullYear() === date.getFullYear() && d.getMonth() === date.getMonth() && d.getDate() === date.getDate();
         });
 
-    const getOutfitsOnDate = (year: number, month: number, day: number): Outfit[] => {
-        const dateStr = dayjs().year(year).month(month).date(day).format('YYYY-MM-DD');
+    const getOutfitsOnDay = (date: Date): Outfit[] => {
+        const dateStr = dayjs(date).format('YYYY-MM-DD');
         return outfits.filter(o => o.outfitDate === dateStr);
     };
 
-    const getDaysInMonth = (y: number, m: number) => dayjs().year(y).month(m).daysInMonth();
-    const getFirstDay = (y: number, m: number) => dayjs().year(y).month(m).date(1).day();
-
-    const prevMonth = () => {
-        if (currentMonth === 0) { setCurrentYear(y => y - 1); setCurrentMonth(11); }
-        else setCurrentMonth(m => m - 1);
-        setPopup(null);
+    const getEventTop = (datetime: string): number => {
+        const d = new Date(datetime);
+        const h = d.getHours(); const m = d.getMinutes();
+        if (h < START_HOUR) return 0;
+        if (h >= END_HOUR) return (END_HOUR - START_HOUR) * HOUR_H - 80;
+        return (h - START_HOUR) * HOUR_H + (m / 60) * HOUR_H;
     };
 
-    const nextMonth = () => {
-        if (currentMonth === 11) { setCurrentYear(y => y + 1); setCurrentMonth(0); }
-        else setCurrentMonth(m => m + 1);
-        setPopup(null);
-    };
+    const weekLabel = (() => {
+        const s = weekDays[0]; const e = weekDays[6];
+        if (s.getMonth() === e.getMonth())
+            return `${s.getFullYear()}년 ${s.getMonth() + 1}월 ${s.getDate()} - ${e.getDate()}일`;
+        return `${s.getFullYear()}년 ${s.getMonth() + 1}월 ${s.getDate()}일 - ${e.getMonth() + 1}월 ${e.getDate()}일`;
+    })();
 
-    const handleDayClick = (day: number) => {
-        const dateStr = dayjs(new Date(currentYear, currentMonth, day)).format('YYYY-MM-DD') + 'T09:00';
-        setForm(f => ({ ...f, eventDatetime: dateStr }));
-        setShowForm(false);
-        setPopup({
-            year: currentYear, month: currentMonth, day,
-            events: getEventsOnDate(currentYear, currentMonth, day),
-            outfits: getOutfitsOnDate(currentYear, currentMonth, day)
-        });
-    };
+    const tpoStats = Object.entries(TPO_COLORS)
+        .map(([tpo, color]) => ({ tpo, color, count: events.filter(e => e.tpoKeyword === tpo).length }))
+        .filter(s => s.count > 0);
 
-    const daysInMonth = getDaysInMonth(currentYear, currentMonth);
-    const firstDay = getFirstDay(currentYear, currentMonth);
+    const hours = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i);
+
+    const btnBase: React.CSSProperties = { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 
     return (
-        <div style={styles.page}>
-            <Navbar />
-            <div style={styles.container}>
+        <div style={{ padding: '70px 28px', width: '100%' }}>
+            {/* Header */}
+            <div style={{ marginBottom: 20 }}>
+                <h1 style={{ fontFamily: 'Hahmlet, sans-serif', fontWeight: 700, fontSize: 28, color: '#1a1a2e', margin: 0 }}>캘린더</h1>
+                <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#888', margin: '5px 0 0' }}>일정과 코디를 한눈에 확인하세요</p>
+            </div>
 
-                <div style={styles.header}>
-                    <button style={styles.monthTitleBtn}
-                            onClick={() => setShowMonthPicker(!showMonthPicker)}>
-                        <span style={styles.yearText}>{currentYear}년</span>
-                        <span style={styles.monthText}>{currentMonth + 1}월</span>
-                        <span style={styles.dropIcon}>{showMonthPicker ? '▲' : '▼'}</span>
-                    </button>
-                    <div style={styles.headerRight}>
-                        <button style={styles.todayBtn} onClick={() => {
-                            setCurrentYear(today.getFullYear());
-                            setCurrentMonth(today.getMonth());
-                            setPopup(null); setShowMonthPicker(false);
-                        }}>오늘</button>
-                        <button style={styles.navBtn} onClick={prevMonth}>‹</button>
-                        <button style={styles.navBtn} onClick={nextMonth}>›</button>
-                        <button style={styles.addBtn} onClick={() => { setShowForm(!showForm); setPopup(null); }}>
-                            + 일정
-                        </button>
-                    </div>
-                </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '228px 1fr', gap: 18, alignItems: 'start' }}>
 
-                {showMonthPicker && (
-                    <div style={styles.pickerBox}>
-                        <div style={styles.yearPicker}>
-                            <button style={styles.pickerNavBtn} onClick={() => setCurrentYear(y => y - 1)}>◀</button>
-                            <span style={styles.pickerYear}>{currentYear}년</span>
-                            <button style={styles.pickerNavBtn} onClick={() => setCurrentYear(y => y + 1)}>▶</button>
+                {/* ── Left sidebar ── */}
+                <div>
+                    {/* Mini calendar */}
+                    <div style={{ background: 'white', borderRadius: 18, padding: 16, border: '1px solid #eaedf2', marginBottom: 14 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                            <span style={{ fontFamily: 'Hahmlet, sans-serif', fontWeight: 700, fontSize: 13, color: '#1a1a2e' }}>
+                                {calYear}년 {calMonth + 1}월
+                            </span>
+                            <div style={{ display: 'flex', gap: 2 }}>
+                                {[{ fn: prevMonth, ch: '‹' }, { fn: nextMonth, ch: '›' }].map(({ fn, ch }) => (
+                                    <button key={ch} onClick={fn} style={{ ...btnBase, width: 24, height: 24, borderRadius: 6, color: '#71b3e5', fontSize: 15 }}>{ch}</button>
+                                ))}
+                            </div>
                         </div>
-                        <div style={styles.monthGrid}>
-                            {MONTHS.map(m => (
-                                <button key={m} style={{
-                                    ...styles.monthPickerBtn,
-                                    backgroundColor: currentMonth === m - 1 ? theme.colors.primary : theme.colors.background,
-                                    color: currentMonth === m - 1 ? 'white' : theme.colors.text
-                                }} onClick={() => { setCurrentMonth(m - 1); setShowMonthPicker(false); setPopup(null); }}>
-                                    {m}월
-                                </button>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: 4 }}>
+                            {WEEKDAYS.map((d, i) => (
+                                <div key={d} style={{ textAlign: 'center', fontSize: 9, fontWeight: 600, fontFamily: 'Inter, sans-serif', padding: '2px 0', color: i === 0 ? '#e74c3c' : i === 6 ? '#3498db' : '#bbb' }}>{d}</div>
                             ))}
                         </div>
-                    </div>
-                )}
 
-                {showForm && (
-                    <div style={styles.formBox}>
-                        <p style={styles.formTitle}>새 일정 추가</p>
-                        <input style={styles.input} type="text" placeholder="일정 이름"
-                               value={form.eventName}
-                               onChange={e => setForm({ ...form, eventName: e.target.value })} />
-                        <input style={styles.input} type="datetime-local"
-                               value={form.eventDatetime}
-                               onChange={e => setForm({ ...form, eventDatetime: e.target.value })} />
-                        <select style={styles.input} value={form.tpoKeyword}
-                                onChange={e => setForm({ ...form, tpoKeyword: e.target.value })}>
-                            {TPO_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            <button style={styles.submitBtn} onClick={handleAddEvent}>저장</button>
-                            <button style={styles.cancelBtn} onClick={() => setShowForm(false)}>취소</button>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 1 }}>
+                            {Array.from({ length: firstDay }).map((_, i) => <div key={`e${i}`} />)}
+                            {Array.from({ length: daysInMonth }).map((_, i) => {
+                                const day = i + 1;
+                                const dow = (firstDay + i) % 7;
+                                const isToday = today.getFullYear() === calYear && today.getMonth() === calMonth && today.getDate() === day;
+                                const inWeek = weekDays.some(wd => wd.getFullYear() === calYear && wd.getMonth() === calMonth && wd.getDate() === day);
+                                const evtsOnDay = events.filter(e => {
+                                    const d = new Date(e.eventDatetime);
+                                    return d.getFullYear() === calYear && d.getMonth() === calMonth && d.getDate() === day;
+                                });
+                                return (
+                                    <div key={day} onClick={() => setWeekBase(new Date(calYear, calMonth, day))} style={{
+                                        textAlign: 'center', padding: '3px 1px', cursor: 'pointer', borderRadius: 6,
+                                        background: isToday ? 'linear-gradient(135deg, #71b3e5, #5a9fd4)' : inWeek ? 'rgba(113,179,229,0.1)' : 'transparent',
+                                    }}>
+                                        <span style={{ fontSize: 11, fontFamily: 'Hahmlet, sans-serif', display: 'block', fontWeight: isToday || inWeek ? 700 : 400, color: isToday ? 'white' : dow === 0 ? '#e74c3c' : dow === 6 ? '#3498db' : '#1a1a2e' }}>{day}</span>
+                                        {evtsOnDay.length > 0 && (
+                                            <div style={{ display: 'flex', justifyContent: 'center', gap: 2, marginTop: 1 }}>
+                                                {evtsOnDay.slice(0, 2).map((ev, ei) => (
+                                                    <div key={ei} style={{ width: 3, height: 3, borderRadius: '50%', background: isToday ? 'rgba(255,255,255,0.8)' : (TPO_COLORS[ev.tpoKeyword] || '#71b3e5') }} />
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
-                )}
 
-                <div style={styles.calendarBox}>
-                    <div style={styles.weekdayRow}>
-                        {WEEKDAYS.map((d, i) => (
-                            <div key={d} style={{
-                                ...styles.weekday,
-                                color: i === 0 ? '#FF5A5A' : i === 6 ? theme.colors.blue : theme.colors.textSub
-                            }}>{d}</div>
-                        ))}
-                    </div>
-                    <div style={styles.daysGrid}>
-                        {Array.from({ length: firstDay }).map((_, i) => (
-                            <div key={`e-${i}`} style={styles.emptyCell} />
-                        ))}
-                        {Array.from({ length: daysInMonth }).map((_, i) => {
-                            const day = i + 1;
-                            const dayEvents = getEventsOnDate(currentYear, currentMonth, day);
-                            const dayOutfits = getOutfitsOnDate(currentYear, currentMonth, day);
-                            const isToday = today.getFullYear() === currentYear &&
-                                today.getMonth() === currentMonth && today.getDate() === day;
-                            const isSelected = popup &&
-                                popup.year === currentYear &&
-                                popup.month === currentMonth &&
-                                popup.day === day;
-                            const dow = (firstDay + i) % 7;
-
-                            return (
-                                <div key={day} style={{
-                                    ...styles.cell,
-                                    backgroundColor: isSelected ? theme.colors.primaryLight : 'transparent',
-                                    cursor: 'pointer'
-                                }} onClick={() => handleDayClick(day)}>
-                                    <div style={{
-                                        ...styles.dayCircle,
-                                        backgroundColor: isToday ? theme.colors.primary : 'transparent',
-                                        color: isToday ? 'white'
-                                            : dow === 0 ? '#FF5A5A'
-                                            : dow === 6 ? theme.colors.blue
-                                            : theme.colors.text
-                                    }}>
-                                        {day}
+                    {/* TPO categories legend */}
+                    {tpoStats.length > 0 && (
+                        <div style={{ background: 'white', borderRadius: 18, padding: 16, border: '1px solid #eaedf2' }}>
+                            <h3 style={{ fontFamily: 'Hahmlet, sans-serif', fontWeight: 700, fontSize: 13, color: '#1a1a2e', margin: '0 0 12px' }}>일정 유형</h3>
+                            {tpoStats.map(({ tpo, color, count }) => (
+                                <div key={tpo} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #f8f8f8' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <div style={{ width: 10, height: 10, borderRadius: 3, background: color, flexShrink: 0 }} />
+                                        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#555' }}>{tpo}</span>
                                     </div>
-                                    {dayEvents.slice(0, 2).map((ev, ei) => (
-                                        <div key={ei} style={{
-                                            ...styles.eventChip,
-                                            backgroundColor: getTpoColor(ev.tpoKeyword) + '22',
-                                            borderLeft: `2px solid ${getTpoColor(ev.tpoKeyword)}`
-                                        }}>
-                                            <span style={{ color: getTpoColor(ev.tpoKeyword), fontSize: '10px', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                                                {ev.eventName}
-                                            </span>
-                                        </div>
-                                    ))}
-                                    {dayOutfits.length > 0 && (
-                                        <div style={styles.outfitDot}>👗</div>
-                                    )}
-                                    {dayEvents.length > 2 && (
-                                        <p style={styles.moreText}>+{dayEvents.length - 2}</p>
-                                    )}
+                                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#bbb' }}>{count}개</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* ── Right: Week view ── */}
+                <div style={{ background: 'white', borderRadius: 20, border: '1px solid #eaedf2', overflow: 'hidden' }}>
+
+                    {/* Week header */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #eaedf2' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            {[{ fn: prevWeek, ch: '‹' }, { fn: nextWeek, ch: '›' }].map(({ fn, ch }) => (
+                                <button key={ch} onClick={fn} style={{ ...btnBase, width: 30, height: 30, background: '#f5f7fa', borderRadius: 8, fontSize: 17, color: '#666' }}>{ch}</button>
+                            ))}
+                            <span style={{ fontFamily: 'Hahmlet, sans-serif', fontWeight: 700, fontSize: 16, color: '#1a1a2e' }}>{weekLabel}</span>
+                            <button onClick={() => setWeekBase(today)} style={{ background: 'rgba(113,179,229,0.12)', border: 'none', borderRadius: 8, padding: '4px 10px', cursor: 'pointer', fontFamily: 'Kedebideri, sans-serif', fontSize: 11, color: '#71b3e5', fontWeight: 600 }}>오늘</button>
+                        </div>
+                        <button
+                            onClick={() => { setForm({ eventName: '', eventDatetime: dayjs(weekBase).format('YYYY-MM-DD') + 'T09:00', tpoKeyword: '일상' }); setShowForm(true); }}
+                            style={{ background: 'linear-gradient(135deg, #71b3e5, #5a9fd4)', border: 'none', borderRadius: 10, padding: '9px 16px', cursor: 'pointer', fontFamily: 'Kedebideri, sans-serif', fontWeight: 700, fontSize: 13, color: 'white', display: 'flex', alignItems: 'center', gap: 5 }}
+                        >+ 일정 추가</button>
+                    </div>
+
+                    {/* Day column headers */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '52px repeat(7, 1fr)', borderBottom: '1px solid #eaedf2' }}>
+                        <div style={{ borderRight: '1px solid #eaedf2' }} />
+                        {weekDays.map((day, i) => {
+                            const isTod = dayjs(day).isSame(dayjs(), 'day');
+                            const dow = day.getDay();
+                            const evtsOnDay = getEventsOnDay(day);
+                            const outfitsOnDay = getOutfitsOnDay(day);
+                            return (
+                                <div key={i} style={{ textAlign: 'center', padding: '10px 4px 8px', borderRight: i < 6 ? '1px solid #eaedf2' : 'none' }}>
+                                    <p style={{ fontFamily: 'Inter, sans-serif', fontWeight: 600, fontSize: 10, margin: 0, letterSpacing: '0.07em', color: isTod ? '#71b3e5' : dow === 0 ? '#e74c3c' : dow === 6 ? '#3498db' : '#aaa' }}>
+                                        {DAY_EN[dow]}
+                                    </p>
+                                    <div style={{ width: 30, height: 30, borderRadius: '50%', margin: '3px auto 4px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isTod ? 'linear-gradient(135deg, #71b3e5, #5a9fd4)' : 'transparent' }}>
+                                        <span style={{ fontFamily: 'Hahmlet, sans-serif', fontWeight: 700, fontSize: 17, color: isTod ? 'white' : dow === 0 ? '#e74c3c' : dow === 6 ? '#3498db' : '#1a1a2e' }}>{day.getDate()}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'center', gap: 3, minHeight: 8 }}>
+                                        {evtsOnDay.slice(0, 3).map((ev, ei) => (
+                                            <div key={ei} style={{ width: 5, height: 5, borderRadius: '50%', background: TPO_COLORS[ev.tpoKeyword] || '#71b3e5' }} />
+                                        ))}
+                                        {outfitsOnDay.length > 0 && <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#e625c6' }} />}
+                                    </div>
                                 </div>
                             );
                         })}
                     </div>
+
+                    {/* Time grid */}
+                    <div style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 310px)' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '52px repeat(7, 1fr)' }}>
+                            {/* Time labels */}
+                            <div style={{ borderRight: '1px solid #eaedf2' }}>
+                                {hours.map(h => (
+                                    <div key={h} style={{ height: HOUR_H, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', paddingRight: 8, paddingTop: 5, borderBottom: '1px solid #f8f9fc' }}>
+                                        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 9, color: '#ccc', whiteSpace: 'nowrap' }}>{String(h).padStart(2, '0')}:00</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Day columns */}
+                            {weekDays.map((day, colIdx) => {
+                                const dayEvents = getEventsOnDay(day);
+                                const dayOutfits = getOutfitsOnDay(day);
+                                const isTod = dayjs(day).isSame(dayjs(), 'day');
+                                return (
+                                    <div key={colIdx} style={{ borderRight: colIdx < 6 ? '1px solid #eaedf2' : 'none', position: 'relative', background: isTod ? 'rgba(113,179,229,0.02)' : 'transparent' }}>
+                                        {/* Hour rows */}
+                                        {hours.map(h => (
+                                            <div key={h} style={{ height: HOUR_H, borderBottom: '1px solid #f8f9fc' }} />
+                                        ))}
+
+                                        {/* Events */}
+                                        {dayEvents.map((evt, ei) => {
+                                            const color = TPO_COLORS[evt.tpoKeyword] || '#71b3e5';
+                                            const top = getEventTop(evt.eventDatetime);
+                                            const timeStr = (() => {
+                                                const d = new Date(evt.eventDatetime);
+                                                return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                                            })();
+                                            return (
+                                                <div key={ei} onClick={() => setActiveEvent(evt)} style={{
+                                                    position: 'absolute', top, left: 3, right: 3, height: 76,
+                                                    background: `${color}20`,
+                                                    borderLeft: `3px solid ${color}`,
+                                                    borderRadius: '0 8px 8px 0',
+                                                    padding: '6px 8px', overflow: 'hidden',
+                                                    cursor: 'pointer', transition: 'opacity 0.15s',
+                                                    zIndex: ei + 1,
+                                                }}>
+                                                    <p style={{ fontFamily: 'Kedebideri, sans-serif', fontWeight: 700, fontSize: 11, color, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{evt.eventName}</p>
+                                                    <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, color: '#999', margin: '4px 0 0' }}>{timeStr}</p>
+                                                </div>
+                                            );
+                                        })}
+
+                                        {/* Outfit badge */}
+                                        {dayOutfits.length > 0 && (
+                                            <div style={{ position: 'absolute', bottom: 6, right: 4, background: 'rgba(230,37,198,0.1)', borderRadius: 6, padding: '2px 7px', pointerEvents: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                <WardrobeIcon color="#e625c6" size={11} />
+                                                <span style={{ fontSize: 10, color: '#e625c6', fontFamily: 'Kedebideri, sans-serif', fontWeight: 600 }}>코디</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            {popup && (
+            {/* Event detail popup */}
+            {activeEvent && (
                 <>
-                    <div style={styles.overlay} onClick={() => setPopup(null)} />
-                    <div style={styles.popupBox}>
-                        <div style={styles.popupHeader}>
-                            <div>
-                                <p style={styles.popupDate}>
-                                    {popup.month + 1}월 {popup.day}일
-                                    <span style={styles.popupWeekday}>
-                                        ({dayjs(new Date(popup.year, popup.month, popup.day)).format('dd')})
-                                    </span>
-                                </p>
+                    <div style={{ position: 'fixed', inset: 0, zIndex: 200 }} onClick={() => setActiveEvent(null)} />
+                    <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 20, width: 320, zIndex: 201, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', padding: 24 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <div style={{ width: 10, height: 10, borderRadius: 3, background: TPO_COLORS[activeEvent.tpoKeyword] || '#71b3e5' }} />
+                                <span style={{ fontFamily: 'Kedebideri, sans-serif', fontWeight: 700, fontSize: 11, color: TPO_COLORS[activeEvent.tpoKeyword] || '#71b3e5' }}>{activeEvent.tpoKeyword}</span>
                             </div>
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                <button style={styles.addEventOnDayBtn}
-                                        onClick={() => setShowForm(true)}>
-                                    + 일정 추가
-                                </button>
-                                <button style={styles.closeBtn} onClick={() => setPopup(null)}>✕</button>
-                            </div>
+                            <button onClick={() => setActiveEvent(null)} style={{ ...btnBase, fontSize: 18, color: '#aaa' }}>✕</button>
                         </div>
-                        <div style={styles.popupContent}>
-                            {popup.events.length === 0 && popup.outfits.length === 0 && !showForm && (
-                                <p style={styles.noEvent}>등록된 일정이 없습니다.</p>
-                            )}
+                        <h3 style={{ fontFamily: 'Hahmlet, sans-serif', fontWeight: 700, fontSize: 18, color: '#1a1a2e', margin: '0 0 8px' }}>{activeEvent.eventName}</h3>
+                        <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#888', margin: '0 0 20px' }}>
+                            {dayjs(activeEvent.eventDatetime).format('YYYY년 M월 D일 (ddd) HH:mm')}
+                        </p>
+                        <button onClick={() => handleDelete(activeEvent.eventId)} style={{ width: '100%', padding: 11, background: 'none', border: '1.5px solid #ffcdd2', borderRadius: 10, color: '#e57373', cursor: 'pointer', fontFamily: 'Kedebideri, sans-serif', fontWeight: 600, fontSize: 13 }}>
+                            삭제
+                        </button>
+                    </div>
+                </>
+            )}
 
-                            {popup.events.map(ev => (
-                                <div key={ev.eventId} style={styles.eventCard}>
-                                    <div style={{ width: '4px', alignSelf: 'stretch', backgroundColor: getTpoColor(ev.tpoKeyword), borderRadius: '2px', flexShrink: 0 }} />
-                                    <div style={{ flex: 1 }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <span style={{ fontSize: '18px' }}>{getTpoEmoji(ev.tpoKeyword)}</span>
-                                            <p style={styles.eventName}>{ev.eventName}</p>
-                                            <span style={{ ...styles.ddayBadge, backgroundColor: getTpoColor(ev.tpoKeyword) }}>
-                                                {getDday(ev.eventDatetime)}
-                                            </span>
-                                        </div>
-                                        <p style={styles.eventTime}>{dayjs(ev.eventDatetime).format('A hh:mm')}</p>
-                                        <span style={{ ...styles.tpoTag, backgroundColor: getTpoColor(ev.tpoKeyword) + '22', color: getTpoColor(ev.tpoKeyword) }}>
-                                            {ev.tpoKeyword}
-                                        </span>
-                                    </div>
-                                    <button style={styles.deleteBtn} onClick={() => handleDelete(ev.eventId)}>삭제</button>
+            {/* Add event modal */}
+            {showForm && (
+                <>
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 200 }} onClick={() => setShowForm(false)} />
+                    <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 20, width: 380, maxWidth: '90vw', zIndex: 201, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', padding: 28 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                            <h2 style={{ fontFamily: 'Hahmlet, sans-serif', fontWeight: 700, fontSize: 18, color: '#1a1a2e', margin: 0 }}>일정 추가</h2>
+                            <button onClick={() => setShowForm(false)} style={{ ...btnBase, fontSize: 18, color: '#aaa' }}>✕</button>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                            <div>
+                                <label style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#888', display: 'block', marginBottom: 6 }}>일정 이름</label>
+                                <input
+                                    value={form.eventName}
+                                    onChange={e => setForm({ ...form, eventName: e.target.value })}
+                                    placeholder="예: 친구 생일파티"
+                                    style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1.5px solid #eaedf2', fontSize: 14, fontFamily: 'Inter, sans-serif', boxSizing: 'border-box', outline: 'none' }}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#888', display: 'block', marginBottom: 6 }}>날짜 & 시간</label>
+                                <input
+                                    type="datetime-local"
+                                    value={form.eventDatetime}
+                                    onChange={e => setForm({ ...form, eventDatetime: e.target.value })}
+                                    style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1.5px solid #eaedf2', fontSize: 14, fontFamily: 'Inter, sans-serif', boxSizing: 'border-box', outline: 'none' }}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#888', display: 'block', marginBottom: 8 }}>TPO</label>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                    {TPO_OPTIONS.map(t => (
+                                        <button key={t} onClick={() => setForm({ ...form, tpoKeyword: t })} style={{
+                                            padding: '6px 14px', borderRadius: 999, cursor: 'pointer', transition: 'all 0.15s', fontFamily: 'Kedebideri, sans-serif', fontSize: 12,
+                                            border: form.tpoKeyword === t ? `2px solid ${TPO_COLORS[t] || '#71b3e5'}` : '1.5px solid #eaedf2',
+                                            background: form.tpoKeyword === t ? `${TPO_COLORS[t] || '#71b3e5'}18` : '#f8f9fc',
+                                            color: form.tpoKeyword === t ? (TPO_COLORS[t] || '#71b3e5') : '#555',
+                                            fontWeight: form.tpoKeyword === t ? 700 : 400,
+                                        }}>{t}</button>
+                                    ))}
                                 </div>
-                            ))}
-
-                            {popup.outfits.map((outfit, i) => (
-                                <div key={i} style={styles.outfitCard}>
-                                    <p style={styles.outfitCardTitle}>👗 저장된 코디</p>
-                                    {outfit.style && <span style={styles.outfitStyle}>{outfit.style}</span>}
-                                    {outfit.description && <p style={styles.outfitDesc}>{outfit.description}</p>}
-                                    {outfit.matchedItems && outfit.matchedItems.length > 0 && (
-                                        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                                            {outfit.matchedItems.map((item, mi) => item.imageUrl && (
-                                                <img key={mi} src={item.imageUrl} alt=""
-                                                     style={{ width: '56px', height: '56px', objectFit: 'cover', borderRadius: theme.radius.md }} />
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-
-                            {showForm && (
-                                <div style={styles.inlineForm}>
-                                    <input style={styles.input} type="text" placeholder="일정 이름"
-                                           value={form.eventName} autoFocus
-                                           onChange={e => setForm({ ...form, eventName: e.target.value })} />
-                                    <input style={styles.input} type="datetime-local"
-                                           value={form.eventDatetime}
-                                           onChange={e => setForm({ ...form, eventDatetime: e.target.value })} />
-                                    <select style={styles.input} value={form.tpoKeyword}
-                                            onChange={e => setForm({ ...form, tpoKeyword: e.target.value })}>
-                                        {TPO_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                                    </select>
-                                    <div style={{ display: 'flex', gap: '8px' }}>
-                                        <button style={styles.submitBtn} onClick={handleAddEvent}>저장</button>
-                                        <button style={styles.cancelBtn} onClick={() => setShowForm(false)}>취소</button>
-                                    </div>
-                                </div>
-                            )}
+                            </div>
+                            <button onClick={handleAddEvent} style={{ width: '100%', padding: 13, background: 'linear-gradient(135deg, #71b3e5, #5a9fd4)', border: 'none', borderRadius: 12, color: 'white', fontFamily: 'Kedebideri, sans-serif', fontWeight: 700, fontSize: 15, cursor: 'pointer', marginTop: 4 }}>
+                                추가하기
+                            </button>
                         </div>
                     </div>
                 </>
@@ -354,60 +408,5 @@ function Calendar() {
         </div>
     );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-    page: { backgroundColor: theme.colors.background, minHeight: '100vh' },
-    container: { maxWidth: '480px', margin: '0 auto', padding: '20px 20px 90px' },
-    header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' },
-    headerRight: { display: 'flex', alignItems: 'center', gap: '6px' },
-    monthTitleBtn: { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'baseline', gap: '6px', padding: '4px 8px' },
-    yearText: { fontSize: '14px', color: theme.colors.textSub },
-    monthText: { fontSize: '28px', fontWeight: '700', color: theme.colors.text },
-    dropIcon: { fontSize: '11px', color: theme.colors.textSub },
-    todayBtn: { padding: '6px 12px', backgroundColor: theme.colors.white, color: theme.colors.text, border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.full, fontSize: '12px', cursor: 'pointer' },
-    navBtn: { padding: '6px 10px', backgroundColor: theme.colors.white, color: theme.colors.text, border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.full, fontSize: '18px', cursor: 'pointer' },
-    addBtn: { padding: '7px 14px', backgroundColor: theme.colors.primary, color: 'white', border: 'none', borderRadius: theme.radius.full, fontSize: '13px', cursor: 'pointer', fontWeight: '600' },
-    pickerBox: { backgroundColor: theme.colors.white, borderRadius: theme.radius.xl, padding: '20px', marginBottom: '16px', boxShadow: theme.colors.cardShadow },
-    yearPicker: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '20px', marginBottom: '16px' },
-    pickerNavBtn: { background: 'none', border: 'none', fontSize: '16px', cursor: 'pointer', color: theme.colors.text },
-    pickerYear: { fontSize: '18px', fontWeight: '700', color: theme.colors.text },
-    monthGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' },
-    monthPickerBtn: { padding: '10px', border: 'none', borderRadius: theme.radius.md, fontSize: '13px', cursor: 'pointer', fontWeight: '500' },
-    formBox: { backgroundColor: theme.colors.white, borderRadius: theme.radius.xl, padding: '20px', marginBottom: '16px', boxShadow: theme.colors.cardShadow },
-    formTitle: { fontSize: '15px', fontWeight: '700', color: theme.colors.text, marginBottom: '12px' },
-    input: { width: '100%', padding: '11px 14px', marginBottom: '10px', borderRadius: theme.radius.md, border: `1px solid ${theme.colors.border}`, fontSize: '14px', boxSizing: 'border-box', backgroundColor: theme.colors.white },
-    submitBtn: { flex: 1, padding: '11px', backgroundColor: theme.colors.primary, color: 'white', border: 'none', borderRadius: theme.radius.full, fontSize: '14px', cursor: 'pointer', fontWeight: '600' },
-    cancelBtn: { flex: 1, padding: '11px', backgroundColor: theme.colors.background, color: theme.colors.textSub, border: 'none', borderRadius: theme.radius.full, fontSize: '14px', cursor: 'pointer' },
-    calendarBox: { backgroundColor: theme.colors.white, borderRadius: theme.radius.xl, padding: '16px', boxShadow: theme.colors.cardShadow },
-    weekdayRow: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: `1px solid ${theme.colors.border}`, paddingBottom: '8px', marginBottom: '4px' },
-    weekday: { textAlign: 'center', fontSize: '12px', fontWeight: '600', padding: '4px 0' },
-    daysGrid: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' },
-    emptyCell: { minHeight: '72px', borderBottom: `1px solid ${theme.colors.background}` },
-    cell: { minHeight: '72px', padding: '4px 3px', borderBottom: `1px solid ${theme.colors.background}`, borderRadius: theme.radius.md, transition: 'background 0.15s' },
-    dayCircle: { width: '26px', height: '26px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '500', marginBottom: '3px' },
-    eventChip: { borderRadius: '3px', padding: '1px 5px', marginBottom: '2px', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' },
-    outfitDot: { fontSize: '10px', textAlign: 'center' },
-    moreText: { fontSize: '10px', color: theme.colors.textSub, margin: '1px 0 0 3px' },
-    overlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 200 },
-    popupBox: { position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: theme.colors.white, borderRadius: theme.radius.xl, width: '380px', maxWidth: '90vw', maxHeight: '80vh', overflowY: 'auto', zIndex: 201, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' },
-    popupHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 20px 0', borderBottom: `1px solid ${theme.colors.border}`, paddingBottom: '16px', position: 'sticky', top: 0, backgroundColor: theme.colors.white },
-    popupDate: { fontSize: '20px', fontWeight: '700', color: theme.colors.text, margin: 0 },
-    popupWeekday: { fontSize: '15px', fontWeight: '400', color: theme.colors.textSub, marginLeft: '6px' },
-    addEventOnDayBtn: { padding: '6px 12px', backgroundColor: theme.colors.primaryLight, color: theme.colors.primary, border: 'none', borderRadius: theme.radius.full, fontSize: '12px', cursor: 'pointer', fontWeight: '500' },
-    closeBtn: { background: 'none', border: 'none', fontSize: '18px', color: '#999', cursor: 'pointer' },
-    popupContent: { padding: '16px 20px 20px' },
-    noEvent: { color: theme.colors.textLight, fontSize: '14px', textAlign: 'center', padding: '20px 0' },
-    eventCard: { display: 'flex', gap: '10px', alignItems: 'flex-start', backgroundColor: theme.colors.background, borderRadius: theme.radius.md, padding: '12px', marginBottom: '10px' },
-    eventName: { fontSize: '14px', fontWeight: '600', color: theme.colors.text, margin: 0, flex: 1 },
-    eventTime: { fontSize: '12px', color: theme.colors.textSub, margin: '4px 0 6px' },
-    ddayBadge: { padding: '2px 8px', borderRadius: theme.radius.full, color: 'white', fontSize: '11px', fontWeight: '700', flexShrink: 0 },
-    tpoTag: { padding: '2px 10px', borderRadius: theme.radius.full, fontSize: '12px', fontWeight: '500' },
-    deleteBtn: { padding: '4px 10px', backgroundColor: 'white', color: theme.colors.danger, border: `1px solid ${theme.colors.danger}`, borderRadius: theme.radius.full, fontSize: '12px', cursor: 'pointer' },
-    outfitCard: { backgroundColor: theme.colors.primaryLight, borderRadius: theme.radius.md, padding: '14px', marginBottom: '10px' },
-    outfitCardTitle: { fontSize: '13px', fontWeight: '700', color: theme.colors.primary, margin: '0 0 6px' },
-    outfitStyle: { display: 'inline-block', backgroundColor: 'white', borderRadius: theme.radius.full, padding: '2px 10px', fontSize: '12px', color: theme.colors.primary, marginBottom: '6px' },
-    outfitDesc: { fontSize: '13px', color: theme.colors.text, lineHeight: '1.5', margin: 0 },
-    inlineForm: { marginTop: '12px' },
-};
 
 export default Calendar;

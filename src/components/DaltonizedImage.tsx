@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { getDaltonizedImageUrl } from '../daltonization';
+import { getDaltonizedImageUrl, ColorType } from '../daltonization';
 
 interface DaltonizedImageProps {
     src: string;
     alt: string;
-    colorType: string;
+    colorType: ColorType | 'normal';
     correctionEnabled: boolean;
     style?: React.CSSProperties;
     imgStyle?: React.CSSProperties;
@@ -29,21 +29,22 @@ export default function DaltonizedImage({
             return;
         }
 
-        let objectUrl: string | null = null;
+        let cancelled = false;
         setLoading(true);
 
-        getDaltonizedImageUrl(src, colorType as 'protanopia' | 'deuteranopia' | 'tritanopia')
+        getDaltonizedImageUrl(src, colorType)
             .then((url) => {
-                objectUrl = url;
-                setDisplaySrc(url);
+                if (!cancelled) setDisplaySrc(url);
             })
             .catch(() => {
-                setDisplaySrc(src);
+                if (!cancelled) setDisplaySrc(src);
             })
-            .finally(() => setLoading(false));
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
 
         return () => {
-            if (objectUrl) URL.revokeObjectURL(objectUrl);
+            cancelled = true;
         };
     }, [src, colorType, correctionEnabled]);
 

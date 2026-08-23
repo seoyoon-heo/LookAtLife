@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { theme } from '../styles/theme';
 import { HomeIcon, WardrobeIcon, CalendarIcon, SparkleIcon, UserIcon } from './Icons';
@@ -26,6 +26,14 @@ function ActiveDot() {
 function Navbar() {
     const location = useLocation();
     const nickname = localStorage.getItem('nickname') || '사용자';
+    const [profileImage, setProfileImage] = useState<string | null>(null);
+
+    useEffect(() => {
+        const load = () => setProfileImage(localStorage.getItem('profileAvatarImage'));
+        load();
+        window.addEventListener('profileImageUpdated', load);
+        return () => window.removeEventListener('profileImageUpdated', load);
+    }, []);
 
     const isActive = (path: string): boolean => {
         if (path === '/') return location.pathname === '/';
@@ -47,15 +55,20 @@ function Navbar() {
         }}>
             {/* Logo */}
             <div style={{ padding: '70px 24px 20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <img
+                        src="/logo.svg"
+                        alt="Look at life"
+                        style={{ width: 55, height: 55, flexShrink: 0 }}
+                    />
                     <span style={{
-                        fontFamily: theme.fontFamily.heading,
+                        
                         fontWeight: 700,
                         fontSize: 28,
                         color: '#1a1a2e',
                         letterSpacing: '-0.3px',
                     }}>
-                        Look at Life
+                        lookatlife
                     </span>
                 </div>
             </div>
@@ -63,7 +76,7 @@ function Navbar() {
             {/* Nav */}
             <nav style={{ flex: 1, padding: '0 12px' }}>
                 <p style={{
-                    fontFamily: theme.fontFamily.body,
+                    
                     fontWeight: 600,
                     fontSize: 12,
                     color: '#aaa',
@@ -97,7 +110,7 @@ function Navbar() {
                                 <Icon color={active ? 'white' : '#555'} />
                             </span>
                             <span style={{
-                                fontFamily: theme.fontFamily.ui,
+                                
                                 fontWeight: active ? 600 : 400,
                                 fontSize: 14,
                                 color: active ? 'white' : '#444',
@@ -113,16 +126,21 @@ function Navbar() {
             {/* Footer */}
             <div style={{ padding: '20px 24px', borderTop: '1px solid #eaedf2' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{
-                        width: 34, height: 34, borderRadius: '50%',
-                        background: 'linear-gradient(135deg, #71b3e5, #bae3ff)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 15, flexShrink: 0,
-                    }}>
-                    </div>
+                    {profileImage ? (
+                        <img src={profileImage} alt="프로필" style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                    ) : (
+                        <div style={{
+                            width: 34, height: 34, borderRadius: '50%',
+                            background: 'linear-gradient(135deg, #71b3e5, #bae3ff)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 15, fontWeight: 700, color: 'white', flexShrink: 0,
+                        }}>
+                            {nickname.charAt(0).toUpperCase()}
+                        </div>
+                    )}
                     <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{
-                            fontFamily: theme.fontFamily.heading,
+                            
                             fontWeight: 600,
                             fontSize: 15,
                             color: '#1a1a2e',

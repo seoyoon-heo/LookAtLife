@@ -52,8 +52,12 @@ function Calendar() {
     const handleAddEvent = async () => {
         if (!form.eventName || !form.eventDatetime) { showToast('일정 이름과 날짜를 입력해주세요', 'error'); return; }
         try {
-            await calendarAPI.addEvent(form);
-            setForm({ eventName: '', eventDatetime: '', tpoKeyword: '일상' });
+            const { selectedOutfit, ...eventData } = form;
+            const res = await calendarAPI.addEvent(eventData);
+            if (selectedOutfit?.imageUrl && res.data?.eventId) {
+                localStorage.setItem(`calendar_outfit_${res.data.eventId}`, selectedOutfit.imageUrl);
+            }
+            setForm({ eventName: '', eventDatetime: '', tpoKeyword: '일상', selectedOutfit: null });
             setShowForm(false);
             await fetchEvents();
             showToast('일정이 추가됐습니다', 'success');
@@ -64,6 +68,7 @@ function Calendar() {
         if (!window.confirm('삭제하시겠습니까?')) return;
         try {
             await calendarAPI.deleteEvent(eventId);
+            localStorage.removeItem(`calendar_outfit_${eventId}`);
             setEvents(events.filter(e => e.eventId !== eventId));
             setActiveEvent(null);
             showToast('일정이 삭제됐습니다', 'success');
@@ -98,11 +103,11 @@ function Calendar() {
         .filter(s => s.count > 0);
 
     return (
-        <div style={{ padding: '70px 28px', width: '100%' }}>
+        <div style={{ padding: '70px 36px', maxWidth: 1200, width: '100%', boxSizing: 'border-box' }}>
             {/* Header */}
             <div style={{ marginBottom: 20 }}>
-                <h1 style={{ fontFamily: theme.fontFamily.heading, fontWeight: 700, fontSize: 28, color: '#1a1a2e', margin: 0 }}>캘린더</h1>
-                <p style={{ fontFamily: theme.fontFamily.body, fontSize: 13, color: '#888', margin: '5px 0 0' }}>일정과 코디를 한눈에 확인하세요</p>
+                <h1 style={{  fontWeight: 700, fontSize: 28, color: '#1a1a2e', margin: 0 }}>캘린더</h1>
+                <p style={{  fontSize: 13, color: '#888', margin: '5px 0 0' }}>일정과 코디를 한눈에 확인하세요</p>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '228px 1fr', gap: 18, alignItems: 'start' }}>
@@ -115,20 +120,21 @@ function Calendar() {
                         today={today}
                         weekDays={weekDays}
                         events={events}
+                        outfits={outfits}
                         onPrevMonth={handlePrevMonth}
                         onNextMonth={handleNextMonth}
                         onDayClick={setWeekBase}
                     />
                     {tpoStats.length > 0 && (
                         <div style={{ background: 'white', borderRadius: 18, padding: 16, border: '1px solid #eaedf2' }}>
-                            <h3 style={{ fontFamily: theme.fontFamily.heading, fontWeight: 700, fontSize: 13, color: '#1a1a2e', margin: '0 0 12px' }}>일정 유형</h3>
+                            <h3 style={{  fontWeight: 700, fontSize: 13, color: '#1a1a2e', margin: '0 0 12px' }}>일정 유형</h3>
                             {tpoStats.map(({ tpo, color, count }) => (
                                 <div key={tpo} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #f8f8f8' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                         <div style={{ width: 10, height: 10, borderRadius: 3, background: color, flexShrink: 0 }} />
-                                        <span style={{ fontFamily: theme.fontFamily.body, fontSize: 12, color: '#555' }}>{tpo}</span>
+                                        <span style={{  fontSize: 12, color: '#555' }}>{tpo}</span>
                                     </div>
-                                    <span style={{ fontFamily: theme.fontFamily.body, fontSize: 11, color: '#bbb' }}>{count}개</span>
+                                    <span style={{  fontSize: 11, color: '#bbb' }}>{count}개</span>
                                 </div>
                             ))}
                         </div>
@@ -169,9 +175,9 @@ function Calendar() {
             {toast && (
                 <div style={{
                     position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)',
-                    background: toast.type === 'success' ? '#1a1a2e' : '#e57373',
+                    background: toast.type === 'success' ? '#71B3E5' : '#e57373',
                     color: 'white', borderRadius: 12, padding: '12px 24px',
-                    fontFamily: theme.fontFamily.ui, fontSize: 14, fontWeight: 600,
+                     fontSize: 14, fontWeight: 600,
                     zIndex: 300, boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
                     display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap',
                 }}>
